@@ -20,21 +20,21 @@ const pricing = [
     name: "Starter",
     price: "39 €",
     features: ["1 Marke", "30 Posts/Monat", "KI-Texte mit eigenem API-Key"],
-    cta: "Starter wählen",
+    cta: "Starter abonnieren",
     plan: "starter",
   },
   {
     name: "Studio",
     price: "89 €",
     features: ["3 Marken", "Unbegrenzte Planung", "Teamfreigaben"],
-    cta: "Studio wählen",
+    cta: "Studio abonnieren",
     plan: "studio",
   },
   {
     name: "Pro",
     price: "179 €",
     features: ["10 Marken", "Trend- und Viralanalyse", "Algorithmus-Signale", "Priorisierter Support"],
-    cta: "Pro testen",
+    cta: "Pro abonnieren",
     plan: "pro",
     featured: true,
   },
@@ -48,7 +48,7 @@ function HeroCalendar() {
           <span>Heute</span>
           <strong>24. – 30. Aug.</strong>
         </div>
-        <Link href="/login" className="mini-button">+ Beitrag erstellen</Link>
+        <Link href="/demo" className="mini-button">Live-Demo öffnen</Link>
       </div>
       <div className="hero-calendar__days" aria-hidden="true">
         {[
@@ -145,7 +145,7 @@ function WorkflowSection() {
         <div className="integration-band__intro">
           <h3>Passt in deinen Stack.</h3>
           <p>Verbinde die Tools, die du schon nutzt. Alles an einem Ort.</p>
-          <Link href="/login">Alle Integrationen <ArrowRight size={17} aria-hidden="true" /></Link>
+          <Link href="/demo">Integrationen in der Demo <ArrowRight size={17} aria-hidden="true" /></Link>
         </div>
         <div className="integration-list">
           {[
@@ -177,7 +177,7 @@ export default function Home() {
         </nav>
         <div className="site-header__actions">
           <Link href="/login" className="text-link">Anmelden</Link>
-          <Link href="/login" className="button button--small">Kostenlos starten</Link>
+          <Link href="/#preise" className="button button--small">Abo wählen</Link>
         </div>
       </header>
 
@@ -186,8 +186,8 @@ export default function Home() {
           <h1>Aus Content wird Kontinuität.</h1>
           <p>Plane, verfeinere und veröffentliche deinen Content für alle Kanäle — in einem fokussierten Workflow.</p>
           <div className="hero__actions">
-            <Link href="/login" className="button">Workspace erstellen</Link>
-            <Link href="/dashboard" className="text-link text-link--arrow"><Play size={16} fill="currentColor" aria-hidden="true" /> Live-Demo ansehen</Link>
+            <Link href="/#preise" className="button">Abo auswählen</Link>
+            <Link href="/demo" className="text-link text-link--arrow"><Play size={16} fill="currentColor" aria-hidden="true" /> Live-Demo ansehen</Link>
           </div>
         </div>
         <HeroCalendar />
@@ -221,14 +221,14 @@ export default function Home() {
             <li><Check aria-hidden="true" /> Vorschläge statt blindem Kopieren</li>
             <li><Check aria-hidden="true" /> Manuelle Freigabe vor jeder Aktion</li>
           </ul>
-          <Link href="/dashboard" className="text-link text-link--arrow">Trendradar öffnen <ArrowRight size={17} aria-hidden="true" /></Link>
+          <Link href="/demo" className="text-link text-link--arrow">Trendradar in der Demo ansehen <ArrowRight size={17} aria-hidden="true" /></Link>
         </div>
       </section>
 
       <section className="pricing section" id="preise">
         <div className="section-heading section-heading--center">
           <h2>Ein Plan, der mit deinem Output wächst.</h2>
-          <p>Monatlich kündbar. Keine Plattform-Passwörter. Dein KI-Key bleibt unter deiner Kontrolle.</p>
+          <p>Der Workspace ist ausschließlich mit aktivem Abo nutzbar. Monatlich kündbar, ohne kostenlose Service-Nutzung.</p>
         </div>
         <div className="pricing__grid">
           {pricing.map((plan) => (
@@ -240,7 +240,7 @@ export default function Home() {
             </article>
           ))}
         </div>
-        <p className="pricing__note">Plattformzugriffe und Veröffentlichungen hängen von der Freigabe der jeweiligen API ab.</p>
+        <p className="pricing__note">Zum Kennenlernen steht die schreibgeschützte Live-Demo bereit. Plattformzugriffe hängen von der Freigabe der jeweiligen API ab.</p>
       </section>
 
       <section className="faq section" aria-label="Häufige Fragen">

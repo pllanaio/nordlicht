@@ -9,9 +9,9 @@ export const metadata: Metadata = { title: "Anmelden" };
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ plan?: string }>;
+  searchParams: Promise<{ plan?: string; reason?: string }>;
 }) {
-  const { plan } = await searchParams;
+  const { plan, reason } = await searchParams;
   return (
     <main className="auth-page">
       <section className="auth-page__panel">
@@ -19,8 +19,15 @@ export default async function LoginPage({
         <BrandMark />
         <div className="auth-page__intro">
           <h1>Willkommen zurück.</h1>
-          <p>Melde dich an und bring deinen Content in den nächsten ruhigen Workflow.</p>
+          <p>Der Workspace steht ausschließlich Kunden mit aktivem Abonnement zur Verfügung.</p>
         </div>
+        {reason === "subscription" ? (
+          <div className="subscription-required" role="status">
+            <strong>Aktives Abo erforderlich</strong>
+            <span>Zum Kennenlernen kannst du die Live-Demo öffnen oder direkt einen Plan auswählen.</span>
+            <div><Link href="/demo">Live-Demo</Link><Link href="/#preise">Abo auswählen</Link></div>
+          </div>
+        ) : null}
         <LoginForm plan={plan} />
       </section>
       <aside className="auth-page__aside">
@@ -33,7 +40,7 @@ export default async function LoginPage({
             <li><Check aria-hidden="true" /> 3 Kanäle verbunden</li>
           </ul>
         </div>
-        <p>Demo-MVP · Authentifizierung wird vor Produktion an einen Identity Provider angebunden.</p>
+        <p>Die Live-Demo ist öffentlich. Der produktive Workspace bleibt abonnementgeschützt.</p>
       </aside>
     </main>
   );

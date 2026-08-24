@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -15,6 +16,7 @@ import {
   ImageIcon,
   LayoutGrid,
   Linkedin,
+  LockKeyhole,
   Menu,
   Plug,
   Plus,
@@ -96,12 +98,12 @@ function WeekPlanner({ items }: { items: ScheduleItem[] }) {
   );
 }
 
-function Overview({ items, onCreate }: { items: ScheduleItem[]; onCreate: () => void }) {
+function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: () => void; demo: boolean }) {
   return (
     <>
       <header className="dashboard-heading">
-        <div><h1>Guten Morgen, Lea.</h1><p>Dein Content für diese Woche ist fast bereit.</p></div>
-        <button className="button dashboard-heading__button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
+        <div><h1>{demo ? "Live-Demo: Nordlicht Studio" : "Guten Morgen, Lea."}</h1><p>{demo ? "Erkunde den Workspace schreibgeschützt." : "Dein Content für diese Woche ist fast bereit."}</p></div>
+        <button className="button dashboard-heading__button" onClick={onCreate}>{demo ? "Mit Abo erstellen" : "Content erstellen"} <Plus size={17} aria-hidden="true" /></button>
       </header>
       <div className="dashboard-grid">
         <div className="dashboard-grid__main">
@@ -139,7 +141,7 @@ function Overview({ items, onCreate }: { items: ScheduleItem[]; onCreate: () => 
               <Image src="/media/creator-studio.webp" alt="Vorschau des TikTok-Reels" width={92} height={128} sizes="92px" />
               <div><strong>Caption (Auszug)</strong><p>Ein Blick hinter die Kulissen von Nordlicht Studio. So entsteht Content, der verbindet.</p></div>
             </div>
-            <button className="button" onClick={onCreate}>Weiter bearbeiten <ArrowRight size={17} aria-hidden="true" /></button>
+            <button className="button" onClick={onCreate}>{demo ? "Mit Abo bearbeiten" : "Weiter bearbeiten"} <ArrowRight size={17} aria-hidden="true" /></button>
           </section>
           <section className="trend-radar">
             <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
@@ -155,7 +157,7 @@ function Overview({ items, onCreate }: { items: ScheduleItem[]; onCreate: () => 
   );
 }
 
-function FeatureView({ view, onCreate }: { view: Exclude<View, "Übersicht">; onCreate: () => void }) {
+function FeatureView({ view, onCreate, demo }: { view: Exclude<View, "Übersicht">; onCreate: () => void; demo: boolean }) {
   const featureCopy: Record<Exclude<View, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
     Mediathek: { title: "Mediathek", text: "Rohmaterial, Entwürfe und veröffentlichte Assets an einem Ort.", icon: FileImage },
@@ -172,8 +174,8 @@ function FeatureView({ view, onCreate }: { view: Exclude<View, "Übersicht">; on
       <header><span><Icon aria-hidden="true" /></span><div><h1>{feature.title}</h1><p>{feature.text}</p></div></header>
       {view === "Trends" ? (
         <div className="feature-view__split">
-          <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button">Test erstellen</button></section>
-          <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button"><UsersRound size={17} aria-hidden="true" /> Review öffnen</button></section>
+          <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button" onClick={demo ? onCreate : undefined}>{demo ? "Mit Abo testen" : "Test erstellen"}</button></section>
+          <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button" onClick={demo ? onCreate : undefined}><UsersRound size={17} aria-hidden="true" /> {demo ? "Mit Abo prüfen" : "Review öffnen"}</button></section>
         </div>
       ) : view === "Integrationen" ? (
         <div className="connector-grid">
@@ -184,20 +186,22 @@ function FeatureView({ view, onCreate }: { view: Exclude<View, "Übersicht">; on
       ) : (
         <div className="feature-view__empty">
           <Icon aria-hidden="true" /><h2>Für den MVP vorbereitet.</h2><p>Die Oberfläche und Adaptergrenzen sind angelegt. Verbinde die Provider-Credentials, um den Live-Flow zu aktivieren.</p>
-          <button className="button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
+          <button className="button" onClick={onCreate}>{demo ? "Abo auswählen" : "Content erstellen"} <Plus size={17} aria-hidden="true" /></button>
         </div>
       )}
     </div>
   );
 }
 
-export function DashboardApp() {
+export function DashboardApp({ mode = "workspace" }: { mode?: "workspace" | "demo" }) {
+  const router = useRouter();
   const [activeView, setActiveView] = useState<View>("Übersicht");
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [items, setItems] = useState(initialScheduleItems);
   const [toast, setToast] = useState("");
+  const isDemo = mode === "demo";
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("de");
@@ -222,8 +226,16 @@ export function DashboardApp() {
     window.setTimeout(() => setToast(""), 3200);
   }
 
+  function openCreate() {
+    if (isDemo) {
+      router.push("/#preise");
+      return;
+    }
+    setComposerOpen(true);
+  }
+
   return (
-    <main className="dashboard-app">
+    <main className={`dashboard-app${isDemo ? " dashboard-app--demo" : ""}`}>
       <aside className={`dashboard-sidebar${sidebarOpen ? " is-open" : ""}`}>
         <div className="dashboard-sidebar__brand"><Link href="/"><BrandMark compact /></Link><button onClick={() => setSidebarOpen(false)} aria-label="Menü schließen"><X /></button></div>
         <nav aria-label="Workspace-Navigation">
@@ -237,18 +249,24 @@ export function DashboardApp() {
       </aside>
 
       <section className="dashboard-shell">
+        {isDemo ? (
+          <div className="demo-banner">
+            <span><LockKeyhole aria-hidden="true" /> Live-Demo · schreibgeschützt</span>
+            <Link href="/#preise">Abo auswählen <ArrowRight size={15} aria-hidden="true" /></Link>
+          </div>
+        ) : null}
         <header className="dashboard-topbar">
           <button className="dashboard-topbar__menu" onClick={() => setSidebarOpen(true)} aria-label="Menü öffnen"><Menu /></button>
           <button className="workspace-switcher"><LayoutGrid aria-hidden="true" /><span>Nordlicht Studio</span><ChevronRight aria-hidden="true" /></button>
           <label className="dashboard-search"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Suchen (z. B. Inhalte, Kanäle, Vorlagen)" aria-label="Workspace durchsuchen" />{query ? <button onClick={() => setQuery("")} aria-label="Suche löschen"><X /></button> : null}</label>
-          <div className="dashboard-profile"><button aria-label="Benachrichtigungen"><Bell aria-hidden="true" /><i /></button><span>L</span><strong>Lea</strong></div>
+          <div className="dashboard-profile"><button aria-label="Benachrichtigungen"><Bell aria-hidden="true" /><i /></button><span>{isDemo ? "D" : "L"}</span><strong>{isDemo ? "Demo" : "Lea"}</strong></div>
         </header>
         <div className="dashboard-content">
           {query && filteredItems.length !== items.length ? <div className="search-result-note">{filteredItems.length} Inhalte passen zu „{query}“.</div> : null}
-          {activeView === "Übersicht" ? <Overview items={filteredItems} onCreate={() => setComposerOpen(true)} /> : <FeatureView view={activeView} onCreate={() => setComposerOpen(true)} />}
+          {activeView === "Übersicht" ? <Overview items={filteredItems} onCreate={openCreate} demo={isDemo} /> : <FeatureView view={activeView} onCreate={openCreate} demo={isDemo} />}
         </div>
       </section>
-      {composerOpen ? <ContentComposer onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
+      {!isDemo && composerOpen ? <ContentComposer onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
       {toast ? <div className="app-toast"><CheckCircle2 aria-hidden="true" /> {toast}</div> : null}
     </main>
   );

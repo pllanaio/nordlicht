@@ -5,9 +5,11 @@ const planPrices: Record<string, string> = {
 };
 
 type MollieCustomer = { id: string };
-type MolliePayment = {
+export type MolliePayment = {
   id: string;
   status: string;
+  customerId?: string;
+  metadata?: { plan?: string; customerId?: string };
   _links?: { checkout?: { href?: string } };
 };
 

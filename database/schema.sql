@@ -35,8 +35,10 @@ create table subscription (
   plan text not null check (plan in ('starter', 'studio', 'pro')),
   status subscription_status not null default 'pending',
   mollie_customer_id text unique,
+  mollie_first_payment_id text unique,
   mollie_subscription_id text unique,
   current_period_end timestamptz,
+  access_checked_at timestamptz,
   updated_at timestamptz not null default now()
 );
 

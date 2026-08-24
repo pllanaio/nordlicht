@@ -23,11 +23,13 @@ Der aktuelle Stand ist ein hochwertiger, interaktiver MVP. Er demonstriert das v
 | Route | Inhalt |
 |---|---|
 | `/` | Landingpage, Produkt-Workflow, Integrationen, Signale und Pricing |
-| `/login` | Demo-Login und planbezogener Einstieg |
-| `/dashboard` | Interaktives Command Center mit Kalender, Suche und Navigation |
-| `/dashboard` → `Content erstellen` | Upload-, KI-Text- und Planungs-Flow mit lokalem Entwurf |
+| `/demo` | Öffentliche, schreibgeschützte Live-Demo des Command Centers |
+| `/subscribe` | Planbezogener Mollie-Checkout mit Name und E-Mail |
+| `/login` | Anmeldung für bestehende Abonnenten |
+| `/dashboard` | Abonnementgeschütztes Command Center mit Kalender, Suche und Navigation |
+| `/dashboard` → `Content erstellen` | Geschützter Upload-, KI-Text- und Planungs-Flow |
 
-Die Demo-Zugangsdaten sind vorausgefüllt. Alternativ öffnet **„Demo ohne Konto öffnen“** direkt den Workspace.
+Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur Anmeldung. Die öffentliche Live-Demo zeigt das Produkterlebnis, erlaubt aber weder Content-Erstellung noch Automatisierung.
 
 ## Produktumfang
 
@@ -36,6 +38,8 @@ Die Demo-Zugangsdaten sind vorausgefüllt. Alternativ öffnet **„Demo ohne Kon
 - KI-Captions und Hashtags per persönlichem OpenAI API-Key (ephemer, nicht gespeichert)
 - Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
 - Mollie First-Payment-Flow als Basis für monatliche Abonnements
+- Serverseitiges Abo-Gate für Workspace und KI-Endpunkt
+- Signierte, kurzlebige Berechtigung erst nach autoritativ bestätigter Mollie-Zahlung
 - Odoo-19-JSON-2-Adapter für CRM-/Projekt-Synchronisation
 - Kuratierte CapCut-/PhotoAI-Übergabe bis ein belastbarer Partner-API-Vertrag vorliegt
 - Trendradar auf Basis eigener Performance-Daten, Zeitraum und Quelle
@@ -86,6 +90,7 @@ npm run build
 |---|---|---:|
 | `NEXT_PUBLIC_APP_URL` | Redirects und Webhook-URL | Nein |
 | `MOLLIE_API_KEY` | Checkout und First Payment | Nein |
+| `SUBSCRIPTION_SESSION_SECRET` | Signiert die kurzlebige Workspace-Berechtigung | Nein |
 | `OPENAI_API_KEY` | Optionaler serverseitiger KI-Fallback | Nein |
 | `META_APP_ID`, `META_APP_SECRET` | Meta OAuth/App-Review | Nein |
 | `META_GRAPH_VERSION` | Explizit pinbare Graph-Version | Nein |
@@ -99,6 +104,7 @@ Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals We
 - Instagram veröffentlicht über die Content Publishing API für autorisierte professionelle Konten. Der konkrete Funktionsumfang hängt vom Accounttyp, den Scopes und dem App-Review ab.
 - TikTok verlangt für Direct Post den Scope `video.publish`; nicht auditierte Clients können nur privat veröffentlichen. Die TikTok-UX muss Creator-Informationen und auswählbare Privacy-Optionen aus der API darstellen.
 - Mollie-Abos brauchen zunächst einen Customer und ein First Payment mit `sequenceType=first`, damit ein Mandat entsteht. Erst danach wird die Subscription angelegt.
+- Ein erfolgreicher UI-Redirect reicht nicht zur Freischaltung: ContentDock fragt den Zahlungsstatus serverseitig bei Mollie ab und setzt erst bei `paid` eine HTTP-only-Berechtigung.
 - Odoo 19 stellt die JSON-2-API bereit. Ein eigener Bot-Nutzer mit minimalen Rechten ist vorgesehen.
 - Für CapCut-Template-Suche und PhotoAI wurde keine belastbare öffentliche Entwickler-API als Produktvertrag dokumentiert. Der MVP nutzt deshalb Empfehlungen und Handoffs, bis Partnerzugänge vereinbart sind.
 
@@ -120,7 +126,7 @@ docs/                            Architektur und Capability-Matrix
 ## Vom MVP zur Produktion
 
 - Identity Provider und serverseitige Session-Validierung anbinden
-- PostgreSQL-Schema migrieren und Tenant-Isolation/RLS aktivieren
+- PostgreSQL-Schema migrieren, Abo-Lebenszyklus persistieren und Tenant-Isolation/RLS aktivieren
 - Objekt-Storage plus signierte Upload-URLs ergänzen
 - Durable Job Queue für geplante Veröffentlichungen und Retries einführen
 - OAuth Token verschlüsselt speichern und rotieren
@@ -131,7 +137,7 @@ docs/                            Architektur und Capability-Matrix
 
 ## Status
 
-Der MVP ist als Produkt- und Engineering-Fundament gedacht. Provider-Credentials sind absichtlich nicht enthalten. Ohne diese Keys bleiben Live-Zahlungen, externe Uploads und Odoo-Sync im Demo-/Adaptermodus.
+Der MVP ist als Produkt- und Engineering-Fundament gedacht. Provider-Credentials sind absichtlich nicht enthalten. Ohne Mollie-Key und Session-Secret bleibt nur die schreibgeschützte Live-Demo zugänglich; Workspace, KI-Endpunkt, Live-Zahlungen, externe Uploads und Odoo-Sync bleiben gesperrt bzw. im Adaptermodus.
 
 ---
 

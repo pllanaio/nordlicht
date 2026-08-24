@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
@@ -19,18 +20,18 @@ export function LoginForm({ plan }: { plan?: string }) {
       {plan ? <div className="auth-form__plan">Ausgewählter Plan: <strong>{plan}</strong></div> : null}
       <label>
         E-Mail-Adresse
-        <input type="email" required defaultValue="lea@nordlicht.studio" autoComplete="email" />
+        <input type="email" required placeholder="name@studio.de" autoComplete="email" />
       </label>
       <label>
         Passwort
-        <input type="password" required defaultValue="contentdock-demo" autoComplete="current-password" />
+        <input type="password" required placeholder="••••••••••••" autoComplete="current-password" />
       </label>
       <div className="auth-form__meta"><label><input type="checkbox" /> Angemeldet bleiben</label><a href="#">Passwort vergessen?</a></div>
       <button className="button auth-form__submit" disabled={loading}>
         {loading ? "Workspace wird geöffnet …" : <>Anmelden <ArrowRight size={17} aria-hidden="true" /></>}
       </button>
-      <button type="button" className="auth-form__demo" onClick={() => router.push("/dashboard")}>Demo ohne Konto öffnen</button>
-      <p>Noch kein Account? <a href="#">Workspace erstellen</a></p>
+      <Link className="auth-form__demo" href="/demo">Live-Demo ansehen</Link>
+      <p>Noch kein Abo? <Link href="/#preise">Plan auswählen</Link></p>
     </form>
   );
 }

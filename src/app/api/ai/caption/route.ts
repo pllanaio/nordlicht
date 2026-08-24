@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getSubscriptionEntitlement } from "@/lib/subscription-access";
 
 type CaptionRequest = {
   title?: string;
@@ -20,6 +21,10 @@ function readOutputText(data: unknown): string {
 }
 
 export async function POST(request: Request) {
+  if (!(await getSubscriptionEntitlement())) {
+    return NextResponse.json({ error: "Für das KI-Studio ist ein aktives Abo erforderlich." }, { status: 403 });
+  }
+
   const apiKey = request.headers.get("x-ai-key") ?? process.env.OPENAI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Kein API-Key übergeben." }, { status: 400 });
 

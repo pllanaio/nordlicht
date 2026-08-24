@@ -1,5 +1,13 @@
 # ContentDock Architektur
 
+## Zugriff und Abonnement
+
+- `/demo` ist öffentlich und schreibgeschützt.
+- `/dashboard` prüft die Abo-Berechtigung in einer Server Component vor dem Rendern.
+- Mutierende Route Handler wie `/api/ai/caption` prüfen dieselbe Berechtigung erneut.
+- Mollie-Redirects allein schalten nichts frei. `/api/mollie/confirm` lädt den autoritativen Zahlungsstatus und akzeptiert ausschließlich `paid`.
+- Die HTTP-only-Berechtigung ist HMAC-signiert und auf 24 Stunden begrenzt. Für Produktion wird sie durch eine Datenbank-Session ersetzt, deren Subscription-Status über idempotente Webhooks aktualisiert wird.
+
 ## Zielbild
 
 ContentDock trennt Produktoberfläche, Domänenlogik und Provider-Zugriffe. Die Web-App darf weiterentwickelt und getestet werden, auch wenn einzelne Plattform-Reviews noch ausstehen.
