@@ -17,15 +17,18 @@ export type SocialOAuthProfile = {
   profileImageUrl?: string;
 };
 
+export type OAuthFlowMode = "demo" | "workspace";
+
 type OAuthProvider = {
   id: SocialProviderId;
   label: string;
   description: string;
   docsUrl: string;
-  scopes: string[];
+  identityScopes: string[];
+  publishingScopes: string[];
   isConfigured(): boolean;
-  createAuthorizationUrl(input: { redirectUri: string; state: string }): URL;
-  exchangeCode(input: { code: string; redirectUri: string }): Promise<SocialOAuthTokens>;
+  createAuthorizationUrl(input: { redirectUri: string; state: string; scopes: string[] }): URL;
+  exchangeCode(input: { code: string; redirectUri: string; requestedScopes: string[] }): Promise<SocialOAuthTokens>;
   getProfile(accessToken: string): Promise<SocialOAuthProfile>;
 };
 
@@ -65,21 +68,22 @@ const instagram: OAuthProvider = {
   label: "Instagram",
   description: "Professional Account für Posts, Reels und Insights verbinden.",
   docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login",
-  scopes: ["instagram_business_basic", "instagram_business_content_publish"],
+  identityScopes: ["instagram_business_basic"],
+  publishingScopes: ["instagram_business_content_publish"],
   isConfigured() {
     return Boolean(process.env.META_APP_ID && process.env.META_APP_SECRET);
   },
-  createAuthorizationUrl({ redirectUri, state }) {
+  createAuthorizationUrl({ redirectUri, state, scopes }) {
     const url = new URL("https://www.instagram.com/oauth/authorize");
     url.searchParams.set("client_id", process.env.META_APP_ID!);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", this.scopes.join(","));
+    url.searchParams.set("scope", scopes.join(","));
     url.searchParams.set("state", state);
     url.searchParams.set("force_authentication", "1");
     return url;
   },
-  async exchangeCode({ code, redirectUri }) {
+  async exchangeCode({ code, redirectUri, requestedScopes }) {
     const body = new URLSearchParams({
       client_id: process.env.META_APP_ID!,
       client_secret: process.env.META_APP_SECRET!,
@@ -111,7 +115,7 @@ const instagram: OAuthProvider = {
     return {
       accessToken,
       expiresAt: expiresAtFromSeconds(longLived.expires_in),
-      scopes: this.scopes,
+      scopes: requestedScopes,
     };
   },
   async getProfile(accessToken) {
@@ -144,20 +148,21 @@ const linkedin: OAuthProvider = {
   label: "LinkedIn",
   description: "Persönliches Profil für geplante LinkedIn-Beiträge verbinden.",
   docsUrl: "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication",
-  scopes: ["openid", "profile", "email", "w_member_social"],
+  identityScopes: ["openid", "profile", "email"],
+  publishingScopes: ["w_member_social"],
   isConfigured() {
     return Boolean(process.env.LINKEDIN_CLIENT_ID && process.env.LINKEDIN_CLIENT_SECRET);
   },
-  createAuthorizationUrl({ redirectUri, state }) {
+  createAuthorizationUrl({ redirectUri, state, scopes }) {
     const url = new URL("https://www.linkedin.com/oauth/v2/authorization");
     url.searchParams.set("client_id", process.env.LINKEDIN_CLIENT_ID!);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", this.scopes.join(" "));
+    url.searchParams.set("scope", scopes.join(" "));
     url.searchParams.set("state", state);
     return url;
   },
-  async exchangeCode({ code, redirectUri }) {
+  async exchangeCode({ code, redirectUri, requestedScopes }) {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -177,7 +182,7 @@ const linkedin: OAuthProvider = {
       accessToken: requireAccessToken(data, "LinkedIn returned no access token"),
       refreshToken: data.refresh_token,
       expiresAt: expiresAtFromSeconds(data.expires_in),
-      scopes: parseScopes(data.scope, this.scopes),
+      scopes: parseScopes(data.scope, requestedScopes),
     };
   },
   async getProfile(accessToken) {
@@ -201,20 +206,21 @@ const tiktok: OAuthProvider = {
   label: "TikTok",
   description: "TikTok-Konto für geprüfte Direct Posts und Video-Uploads verbinden.",
   docsUrl: "https://developers.tiktok.com/doc/login-kit-web",
-  scopes: ["user.info.basic", "video.publish"],
+  identityScopes: ["user.info.basic"],
+  publishingScopes: ["video.publish"],
   isConfigured() {
     return Boolean(process.env.TIKTOK_CLIENT_KEY && process.env.TIKTOK_CLIENT_SECRET);
   },
-  createAuthorizationUrl({ redirectUri, state }) {
+  createAuthorizationUrl({ redirectUri, state, scopes }) {
     const url = new URL("https://www.tiktok.com/v2/auth/authorize/");
     url.searchParams.set("client_key", process.env.TIKTOK_CLIENT_KEY!);
     url.searchParams.set("redirect_uri", redirectUri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", this.scopes.join(","));
+    url.searchParams.set("scope", scopes.join(","));
     url.searchParams.set("state", state);
     return url;
   },
-  async exchangeCode({ code, redirectUri }) {
+  async exchangeCode({ code, redirectUri, requestedScopes }) {
     const body = new URLSearchParams({
       client_key: process.env.TIKTOK_CLIENT_KEY!,
       client_secret: process.env.TIKTOK_CLIENT_SECRET!,
@@ -234,7 +240,7 @@ const tiktok: OAuthProvider = {
       accessToken: requireAccessToken(data, "TikTok returned no access token"),
       refreshToken: data.refresh_token,
       expiresAt: expiresAtFromSeconds(data.expires_in),
-      scopes: parseScopes(data.scope, this.scopes),
+      scopes: parseScopes(data.scope, requestedScopes),
     };
   },
   async getProfile(accessToken) {
@@ -269,4 +275,15 @@ export function isSocialProviderId(value: string): value is SocialProviderId {
 
 export function getSocialOAuthProvider(provider: SocialProviderId) {
   return providers[provider];
+}
+
+export function getSocialOAuthScopes(provider: SocialProviderId, mode: OAuthFlowMode) {
+  const definition = providers[provider];
+  return mode === "demo"
+    ? [...definition.identityScopes]
+    : [...definition.identityScopes, ...definition.publishingScopes];
+}
+
+export function getSocialPublishingScopes(provider: SocialProviderId) {
+  return [...providers[provider].publishingScopes];
 }

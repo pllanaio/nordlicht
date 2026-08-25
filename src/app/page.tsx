@@ -240,7 +240,7 @@ export default function Home() {
             </article>
           ))}
         </div>
-        <p className="pricing__note">Zum Kennenlernen steht die schreibgeschützte Live-Demo bereit. Plattformzugriffe hängen von der Freigabe der jeweiligen API ab.</p>
+        <p className="pricing__note">In der Live-Demo kannst du Accounts verbinden, Content erstellen und planen. Erst die tatsächliche Veröffentlichung benötigt ein Abo und die Publishing-Freigabe des jeweiligen Providers.</p>
       </section>
 
       <section className="faq section" aria-label="Häufige Fragen">

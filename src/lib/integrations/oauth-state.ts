@@ -2,12 +2,15 @@ import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import type { SocialProviderId } from "./contracts";
+import type { OAuthFlowMode } from "./social-oauth";
 
 const stateLifetimeMs = 10 * 60 * 1_000;
 
-type OAuthStatePayload = {
+export type OAuthStatePayload = {
   provider: SocialProviderId;
-  paymentId: string;
+  mode: OAuthFlowMode;
+  subject: string;
+  scopes: string[];
   nonce: string;
   issuedAt: number;
 };
@@ -37,10 +40,17 @@ export function oauthStateCookieName(provider: SocialProviderId) {
   return `contentdock_oauth_state_${provider}`;
 }
 
-export function createOAuthState(provider: SocialProviderId, paymentId: string) {
+export function createOAuthState(input: {
+  provider: SocialProviderId;
+  mode: OAuthFlowMode;
+  subject: string;
+  scopes: string[];
+}) {
   const state: OAuthStatePayload = {
-    provider,
-    paymentId,
+    provider: input.provider,
+    mode: input.mode,
+    subject: input.subject,
+    scopes: input.scopes,
     nonce: randomBytes(24).toString("base64url"),
     issuedAt: Date.now(),
   };
@@ -48,30 +58,34 @@ export function createOAuthState(provider: SocialProviderId, paymentId: string) 
   return `${payload}.${sign(payload)}`;
 }
 
-export function verifyOAuthState(token: string, provider: SocialProviderId, paymentId: string) {
+export function verifyOAuthState(token: string, provider: SocialProviderId): OAuthStatePayload | null {
   const [payload, signature] = token.split(".");
-  if (!payload || !signature) return false;
+  if (!payload || !signature) return null;
 
   let expected: string;
   try {
     expected = sign(payload);
   } catch {
-    return false;
+    return null;
   }
-  if (!signaturesMatch(expected, signature)) return false;
+  if (!signaturesMatch(expected, signature)) return null;
 
   try {
     const state = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as OAuthStatePayload;
-    return (
+    const valid =
       state.provider === provider &&
-      state.paymentId === paymentId &&
+      (state.mode === "demo" || state.mode === "workspace") &&
+      typeof state.subject === "string" &&
+      state.subject.length >= 16 &&
+      Array.isArray(state.scopes) &&
+      state.scopes.every((scope) => typeof scope === "string") &&
       typeof state.nonce === "string" &&
       state.nonce.length >= 24 &&
       typeof state.issuedAt === "number" &&
       state.issuedAt <= Date.now() &&
-      Date.now() - state.issuedAt <= stateLifetimeMs
-    );
+      Date.now() - state.issuedAt <= stateLifetimeMs;
+    return valid ? state : null;
   } catch {
-    return false;
+    return null;
   }
 }

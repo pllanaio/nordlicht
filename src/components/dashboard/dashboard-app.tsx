@@ -2,7 +2,6 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
@@ -112,8 +111,8 @@ function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: 
   return (
     <>
       <header className="dashboard-heading">
-        <div><h1>{demo ? "Live-Demo: Nordlicht Studio" : "Guten Morgen, Lea."}</h1><p>{demo ? "Erkunde den Workspace schreibgeschützt." : "Dein Content für diese Woche ist fast bereit."}</p></div>
-        <button className="button dashboard-heading__button" onClick={onCreate}>{demo ? "Mit Abo erstellen" : "Content erstellen"} <Plus size={17} aria-hidden="true" /></button>
+        <div><h1>{demo ? "Live-Demo: Nordlicht Studio" : "Guten Morgen, Lea."}</h1><p>{demo ? "Erstelle und plane Content – nur das Veröffentlichen bleibt gesperrt." : "Dein Content für diese Woche ist fast bereit."}</p></div>
+        <button className="button dashboard-heading__button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
       </header>
       <div className="dashboard-grid">
         <div className="dashboard-grid__main">
@@ -151,7 +150,7 @@ function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: 
               <Image src="/media/creator-studio.webp" alt="Vorschau des TikTok-Reels" width={92} height={128} sizes="92px" />
               <div><strong>Caption (Auszug)</strong><p>Ein Blick hinter die Kulissen von Nordlicht Studio. So entsteht Content, der verbindet.</p></div>
             </div>
-            <button className="button" onClick={onCreate}>{demo ? "Mit Abo bearbeiten" : "Weiter bearbeiten"} <ArrowRight size={17} aria-hidden="true" /></button>
+            <button className="button" onClick={onCreate}>Weiter bearbeiten <ArrowRight size={17} aria-hidden="true" /></button>
           </section>
           <section className="trend-radar">
             <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
@@ -167,51 +166,6 @@ function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: 
   );
 }
 
-const demoConnectors: SocialConnectorCard[] = [
-  {
-    provider: "instagram",
-    label: "Instagram",
-    description: "Professional Account für Posts, Reels und Insights verbinden.",
-    docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login",
-    configured: true,
-    connection: {
-      provider: "instagram",
-      accountId: "demo-instagram",
-      displayName: "@nordlicht.studio",
-      scopes: ["instagram_business_basic", "instagram_business_content_publish"],
-      connectedAt: "2026-08-20T09:00:00.000Z",
-    },
-  },
-  {
-    provider: "linkedin",
-    label: "LinkedIn",
-    description: "Persönliches Profil für geplante LinkedIn-Beiträge verbinden.",
-    docsUrl: "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication",
-    configured: true,
-    connection: {
-      provider: "linkedin",
-      accountId: "demo-linkedin",
-      displayName: "Nordlicht Studio",
-      scopes: ["openid", "profile", "w_member_social"],
-      connectedAt: "2026-08-21T09:00:00.000Z",
-    },
-  },
-  {
-    provider: "tiktok",
-    label: "TikTok",
-    description: "TikTok-Konto für geprüfte Direct Posts und Video-Uploads verbinden.",
-    docsUrl: "https://developers.tiktok.com/doc/login-kit-web",
-    configured: true,
-    connection: {
-      provider: "tiktok",
-      accountId: "demo-tiktok",
-      displayName: "@nordlicht.studio",
-      scopes: ["user.info.basic", "video.publish"],
-      connectedAt: "2026-08-19T09:00:00.000Z",
-    },
-  },
-];
-
 const socialProviderIcons: Record<SocialProviderId, typeof Instagram> = {
   instagram: Instagram,
   linkedin: Linkedin,
@@ -221,14 +175,10 @@ const socialProviderIcons: Record<SocialProviderId, typeof Instagram> = {
 function IntegrationsView({
   connectors,
   demo,
-  onSubscribe,
 }: {
   connectors: SocialConnectorCard[];
   demo: boolean;
-  onSubscribe: () => void;
 }) {
-  const socialConnectors = demo ? demoConnectors : connectors;
-
   return (
     <div className="integrations-panel">
       <div className="integrations-panel__intro">
@@ -241,7 +191,7 @@ function IntegrationsView({
       </div>
 
       <div className="social-connector-grid">
-        {socialConnectors.map((connector) => {
+        {connectors.map((connector) => {
           const Icon = socialProviderIcons[connector.provider];
           const connected = Boolean(connector.connection);
           return (
@@ -257,23 +207,27 @@ function IntegrationsView({
               {connector.connection ? (
                 <div className="social-connector__account">
                   <span>{connector.connection.displayName.slice(0, 1).toLocaleUpperCase("de")}</span>
-                  <div><strong>{connector.connection.displayName}</strong><small>{connector.connection.scopes.length} Berechtigungen freigegeben</small></div>
+                  <div><strong>{connector.connection.displayName}</strong><small>{connector.publishingReady ? "Publishing freigegeben" : "Account erfolgreich hinterlegt"}</small></div>
                 </div>
               ) : (
                 <div className="social-connector__notice">
                   {connector.configured ? <Link2 aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
-                  <span>{connector.configured ? "Bereit für den offiziellen Login-Dialog." : "App-ID, Secret und Token-Schlüssel in Vercel hinterlegen."}</span>
+                  <span>{connector.configured ? "Bereit für den offiziellen Login-Dialog." : demo ? "Dieser Connector wird aktuell eingerichtet." : "App-ID, Secret und Token-Schlüssel in Vercel hinterlegen."}</span>
                 </div>
               )}
               <div className="social-connector__actions">
-                {demo ? (
-                  <button className="secondary-button" onClick={onSubscribe}>Eigenen Account verbinden</button>
+                {connector.connection && demo ? (
+                  <form action={`/api/connect/${connector.provider}/disconnect?mode=demo`} method="post">
+                    <button className="secondary-button" type="submit"><Unplug size={15} aria-hidden="true" /> Verbindung trennen</button>
+                  </form>
+                ) : connector.connection && !connector.publishingReady ? (
+                  <a className="button" href={`/api/connect/${connector.provider}/start`}>Publishing freigeben <ArrowRight size={15} aria-hidden="true" /></a>
                 ) : connector.connection ? (
                   <form action={`/api/connect/${connector.provider}/disconnect`} method="post">
                     <button className="secondary-button" type="submit"><Unplug size={15} aria-hidden="true" /> Trennen</button>
                   </form>
                 ) : connector.configured ? (
-                  <a className="button" href={`/api/connect/${connector.provider}/start`}>Mit {connector.label} verbinden <ArrowRight size={15} aria-hidden="true" /></a>
+                  <a className="button" href={`/api/connect/${connector.provider}/start${demo ? "?mode=demo" : ""}`}>Mit {connector.label} verbinden <ArrowRight size={15} aria-hidden="true" /></a>
                 ) : (
                   <span className="social-connector__disabled">Noch nicht konfiguriert</span>
                 )}
@@ -283,6 +237,8 @@ function IntegrationsView({
           );
         })}
       </div>
+
+      {demo ? <p className="integrations-panel__paywall"><LockKeyhole aria-hidden="true" /> Account-Verbindung, Content-Erstellung und Planung funktionieren in der Demo. Erst die tatsächliche Veröffentlichung benötigt ein aktives Abo und zusätzliche Publishing-Freigaben.</p> : null}
 
       <section className="connector-architecture">
         <div><span>1</span><strong>Verbinden</strong><small>Offizieller Login beim Anbieter</small></div>
@@ -328,15 +284,15 @@ function FeatureView({
       <header><span><Icon aria-hidden="true" /></span><div><h1>{feature.title}</h1><p>{feature.text}</p></div></header>
       {view === "Trends" ? (
         <div className="feature-view__split">
-          <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button" onClick={demo ? onCreate : undefined}>{demo ? "Mit Abo testen" : "Test erstellen"}</button></section>
-          <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button" onClick={demo ? onCreate : undefined}><UsersRound size={17} aria-hidden="true" /> {demo ? "Mit Abo prüfen" : "Review öffnen"}</button></section>
+          <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button">Test erstellen</button></section>
+          <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button"><UsersRound size={17} aria-hidden="true" /> Review öffnen</button></section>
         </div>
       ) : view === "Integrationen" ? (
-        <IntegrationsView connectors={connectors} demo={demo} onSubscribe={onCreate} />
+        <IntegrationsView connectors={connectors} demo={demo} />
       ) : (
         <div className="feature-view__empty">
           <Icon aria-hidden="true" /><h2>Für den MVP vorbereitet.</h2><p>Die Oberfläche und Adaptergrenzen sind angelegt. Verbinde die Provider-Credentials, um den Live-Flow zu aktivieren.</p>
-          <button className="button" onClick={onCreate}>{demo ? "Abo auswählen" : "Content erstellen"} <Plus size={17} aria-hidden="true" /></button>
+          <button className="button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
         </div>
       )}
     </div>
@@ -369,7 +325,6 @@ export function DashboardApp({
   initialView?: View;
   connectorFeedback?: ConnectorFeedback;
 }) {
-  const router = useRouter();
   const [activeView, setActiveView] = useState<View>(initialView);
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -407,10 +362,6 @@ export function DashboardApp({
   }
 
   function openCreate() {
-    if (isDemo) {
-      router.push("/#preise");
-      return;
-    }
     setComposerOpen(true);
   }
 
@@ -431,7 +382,7 @@ export function DashboardApp({
       <section className="dashboard-shell">
         {isDemo ? (
           <div className="demo-banner">
-            <span><LockKeyhole aria-hidden="true" /> Live-Demo · schreibgeschützt</span>
+            <span><LockKeyhole aria-hidden="true" /> Live-Demo · Veröffentlichung gesperrt</span>
             <Link href="/#preise">Abo auswählen <ArrowRight size={15} aria-hidden="true" /></Link>
           </div>
         ) : null}
@@ -446,7 +397,7 @@ export function DashboardApp({
           {activeView === "Übersicht" ? <Overview items={filteredItems} onCreate={openCreate} demo={isDemo} /> : <FeatureView view={activeView} onCreate={openCreate} demo={isDemo} connectors={connectors} />}
         </div>
       </section>
-      {!isDemo && composerOpen ? <ContentComposer onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
+      {composerOpen ? <ContentComposer mode={mode} onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
       {toast ? <div className="app-toast"><CheckCircle2 aria-hidden="true" /> {toast}</div> : null}
     </main>
   );

@@ -1352,6 +1352,8 @@ summary:focus-visible {
 .integrations-panel__intro p { max-width: 650px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
 .integrations-panel__security { min-height: 38px; display: flex; align-items: center; gap: 8px; flex: 0 0 auto; border: 1px solid #a7d5b1; border-radius: 999px; padding: 0 14px; background: #f3faf4; color: var(--sage-ink); font-size: 10px; font-weight: 750; }
 .integrations-panel__security svg { width: 16px; }
+.integrations-panel__paywall { min-height: 48px; display: flex; align-items: center; gap: 10px; margin: 16px 0 0; border-left: 3px solid var(--coral); padding: 10px 14px; background: var(--coral-soft); color: var(--muted); font-size: 10px; line-height: 1.5; }
+.integrations-panel__paywall svg { width: 17px; flex: 0 0 auto; color: var(--coral-dark); }
 .social-connector-grid { margin-top: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .social-connector { position: relative; min-height: 330px; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: white; overflow: hidden; }
 .social-connector::before { content: ""; position: absolute; inset: 0 0 auto; height: 3px; background: var(--coral); }

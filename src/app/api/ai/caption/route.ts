@@ -21,11 +21,17 @@ function readOutputText(data: unknown): string {
 }
 
 export async function POST(request: Request) {
-  if (!(await getSubscriptionEntitlement())) {
-    return NextResponse.json({ error: "Für das KI-Studio ist ein aktives Abo erforderlich." }, { status: 403 });
+  const entitlement = await getSubscriptionEntitlement();
+  const isDemoRequest = request.headers.get("x-contentdock-mode") === "demo";
+  const personalApiKey = request.headers.get("x-ai-key");
+  if (!entitlement && !isDemoRequest) {
+    return NextResponse.json({ error: "Für diesen Zugriff ist ein aktives Abo erforderlich." }, { status: 403 });
+  }
+  if (!entitlement && !personalApiKey) {
+    return NextResponse.json({ error: "In der Demo ist für echte KI-Generierung ein eigener API-Key erforderlich." }, { status: 400 });
   }
 
-  const apiKey = request.headers.get("x-ai-key") ?? process.env.OPENAI_API_KEY;
+  const apiKey = personalApiKey ?? process.env.OPENAI_API_KEY;
   if (!apiKey) return NextResponse.json({ error: "Kein API-Key übergeben." }, { status: 400 });
 
   const body = (await request.json()) as CaptionRequest;

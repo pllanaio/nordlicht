@@ -18,6 +18,7 @@ export type SocialConnectorCard = {
   description: string;
   docsUrl: string;
   configured: boolean;
+  publishingReady: boolean;
   connection?: SocialConnectionSummary;
 };
 

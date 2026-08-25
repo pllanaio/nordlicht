@@ -2,7 +2,7 @@
 
 ## Zugriff und Abonnement
 
-- `/demo` ist öffentlich und schreibgeschützt.
+- `/demo` ist öffentlich und interaktiv; nur Publish-Aufrufe bleiben gesperrt.
 - `/dashboard` prüft die Abo-Berechtigung in einer Server Component vor dem Rendern.
 - Mutierende Route Handler wie `/api/ai/caption` prüfen dieselbe Berechtigung erneut.
 - Mollie-Redirects allein schalten nichts frei. `/api/mollie/confirm` lädt den autoritativen Zahlungsstatus und akzeptiert ausschließlich `paid`.
@@ -38,14 +38,14 @@ flowchart TD
 
 ## Social-OAuth
 
-1. Der abonnementgeschützte Start-Handler erzeugt einen HMAC-signierten, zehn Minuten gültigen `state`-Wert.
+1. Der Start-Handler erzeugt einen HMAC-signierten, zehn Minuten gültigen `state`-Wert und bindet ihn an eine Demo- oder Abo-Session.
 2. Ein providerbezogenes HTTP-only Cookie bindet den Wert an denselben Browser und verhindert Login-CSRF.
 3. Meta, LinkedIn oder TikTok authentifiziert den Nutzer und leitet nur einen einmaligen Authorization Code zurück.
-4. Der Callback prüft Abo, Provider, Cookie und `state`, bevor der Code serverseitig gegen Tokens getauscht wird.
+4. Der Callback prüft Flow-Modus, Session, Provider, Cookie und `state`, bevor der Code serverseitig gegen Tokens getauscht wird.
 5. Der Test-MVP verschlüsselt Tokens per AES-256-GCM in providerbezogenen HTTP-only Cookies. React erhält nur Accountname, Scopes und Ablaufdatum.
 6. Die Produktionsimplementierung schreibt denselben verschlüsselten Payload in `social_connection`; Browser-Cookies enthalten dann nur die normale Session-ID.
 
-Die Live-Demo führt keine OAuth-Requests aus. Client Secrets und Provider-Tokens werden weder an Client Components serialisiert noch in Logs geschrieben.
+Die Live-Demo führt reale OAuth-Requests mit minimalen Identitäts-Scopes aus. Publishing-Scopes werden erst im abonnementgeschützten Workspace nachgefordert. Client Secrets und Provider-Tokens werden weder an Client Components serialisiert noch in Logs geschrieben.
 
 ## Veröffentlichungspfad
 

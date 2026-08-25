@@ -23,13 +23,13 @@ Der aktuelle Stand ist ein hochwertiger, interaktiver MVP. Er demonstriert das v
 | Route | Inhalt |
 |---|---|
 | `/` | Landingpage, Produkt-Workflow, Integrationen, Signale und Pricing |
-| `/demo` | Öffentliche, schreibgeschützte Live-Demo des Command Centers |
+| `/demo` | Öffentliche, interaktive Live-Demo mit Account-Connect, Entwürfen und Planung |
 | `/subscribe` | Planbezogener Mollie-Checkout mit Name und E-Mail |
 | `/login` | Anmeldung für bestehende Abonnenten |
 | `/dashboard` | Abonnementgeschütztes Command Center mit Kalender, Suche und Navigation |
 | `/dashboard` → `Content erstellen` | Geschützter Upload-, KI-Text- und Planungs-Flow |
 
-Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur Anmeldung. Die öffentliche Live-Demo zeigt das Produkterlebnis, erlaubt aber weder Content-Erstellung noch Automatisierung.
+Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur Anmeldung. In der öffentlichen Live-Demo können Nutzer reale Accounts mit minimalen Identitäts-Scopes verbinden, Content lokal erstellen und planen. Nur der tatsächliche Publish-Aufruf und die dafür nötigen Schreibrechte bleiben abonnementgeschützt.
 
 ## Produktumfang
 
@@ -38,6 +38,7 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 - KI-Captions und Hashtags per persönlichem OpenAI API-Key (ephemer, nicht gespeichert)
 - Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
 - OAuth-Connectoren für Instagram, LinkedIn und TikTok mit offiziellem Provider-Login
+- Progressive OAuth-Scopes: Basisverbindung in der Demo, Publishing-Freigabe erst nach Aboabschluss
 - HMAC-gesicherter OAuth-State, minimale Scopes und AES-256-GCM-verschlüsselte Token-Cookies für den Testbetrieb
 - Mollie First-Payment-Flow als Basis für monatliche Abonnements
 - Serverseitiges Abo-Gate für Workspace und KI-Endpunkt
@@ -94,19 +95,19 @@ npm run build
 | `MOLLIE_API_KEY` | Checkout und First Payment | Nein |
 | `SUBSCRIPTION_SESSION_SECRET` | Signiert die kurzlebige Workspace-Berechtigung | Nein |
 | `OPENAI_API_KEY` | Optionaler serverseitiger KI-Fallback | Nein |
-| `META_APP_ID`, `META_APP_SECRET` | Meta OAuth/App-Review | Nein |
+| `META_APP_ID`, `META_APP_SECRET` | ContentDock-App bei Meta; Nutzer verbinden sich anschließend selbst | Für Instagram-Connect |
 | `META_GRAPH_VERSION`, `META_GRAPH_HOST` | Explizit pinbare Instagram-Graph-Version und API-Host | Nein |
-| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | LinkedIn OAuth und Member Posting | Nein |
-| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | TikTok Login/Posting | Nein |
-| `OAUTH_STATE_SECRET` | Signiert kurzlebige OAuth-Anfragen gegen Login-CSRF | Nein |
-| `SOCIAL_TOKEN_ENCRYPTION_KEY` | 32-Byte-Base64-Key für AES-256-GCM | Nein |
+| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | ContentDock-App bei LinkedIn | Für LinkedIn-Connect |
+| `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | ContentDock-App bei TikTok | Für TikTok-Connect |
+| `OAUTH_STATE_SECRET` | Signiert kurzlebige OAuth-Anfragen gegen Login-CSRF | Für Social Connect |
+| `SOCIAL_TOKEN_ENCRYPTION_KEY` | 32-Byte-Base64-Key für AES-256-GCM | Für Social Connect |
 | `ODOO_BASE_URL`, `ODOO_DATABASE`, `ODOO_API_KEY` | Odoo JSON-2 | Nein |
 
 Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals Werte aus `.env.local` committen.
 
 ### Social Connectoren
 
-Die produktive Integrationsansicht liegt unter `/dashboard` → `Integrationen` und bleibt durch das aktive Abonnement geschützt. Für jeden Provider muss im jeweiligen Developer-Portal exakt folgende Callback-URL eingetragen werden:
+Die Integrationsansicht ist sowohl unter `/demo` als auch im produktiven `/dashboard` verfügbar. Für jeden Provider muss im jeweiligen Developer-Portal exakt folgende Callback-URL eingetragen werden:
 
 ```text
 https://<deine-domain>/api/connect/instagram/callback
@@ -115,6 +116,8 @@ https://<deine-domain>/api/connect/tiktok/callback
 ```
 
 Der Test-MVP speichert die Provider-Tokens ausschließlich in separaten, HTTP-only Cookies. Der gesamte Payload ist mit AES-256-GCM verschlüsselt; der Schlüssel bleibt serverseitig. Diese Variante ist für einen Vercel-Test und Einzelbenutzer gedacht. Vor Team-/Multi-Device-Betrieb wird derselbe Store gegen `social_connection` in PostgreSQL ausgetauscht, damit Token-Rotation, Widerruf und Audit-Logs zentral erfolgen.
+
+Die App-Credentials identifizieren ContentDock gegenüber dem Provider und werden einmalig vom Betreiber in Vercel hinterlegt. Nutzer geben ausschließlich im offiziellen Meta-, LinkedIn- oder TikTok-Dialog ihre Zustimmung. In der Demo fordert ContentDock nur Basis-/Identitäts-Scopes an. Nach dem Aboabschluss startet „Publishing freigeben“ eine zweite Autorisierung mit den jeweiligen Schreibrechten.
 
 ## Provider-Realität
 
@@ -155,7 +158,7 @@ docs/                            Architektur und Capability-Matrix
 
 ## Status
 
-Der MVP ist als Produkt- und Engineering-Fundament gedacht. Provider-Credentials sind absichtlich nicht enthalten. Ohne Mollie-Key und Session-Secret bleibt nur die schreibgeschützte Live-Demo zugänglich; Workspace, KI-Endpunkt, Live-Zahlungen, externe Uploads und Odoo-Sync bleiben gesperrt bzw. im Adaptermodus.
+Der MVP ist als Produkt- und Engineering-Fundament gedacht. Provider-Credentials sind absichtlich nicht enthalten. Ohne sie bleibt die Demo interaktiv, kann aber keine realen Social Accounts verbinden. Entwürfe, lokale Planung und Demo-Copy funktionieren weiterhin; echte KI-Generierung in der Demo benötigt den persönlichen API-Key. Veröffentlichung und produktiver Workspace bleiben abonnementgeschützt.
 
 ---
 

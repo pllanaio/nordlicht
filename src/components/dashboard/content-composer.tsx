@@ -27,9 +27,11 @@ const demoCopy: GeneratedCopy = {
 };
 
 export function ContentComposer({
+  mode,
   onClose,
   onCreate,
 }: {
+  mode: "workspace" | "demo";
   onClose: () => void;
   onCreate: (content: { title: string; channel: Channel; caption: string }) => void;
 }) {
@@ -62,7 +64,7 @@ export function ContentComposer({
     try {
       const response = await fetch("/api/ai/caption", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-ai-key": apiKey },
+        headers: { "Content-Type": "application/json", "x-ai-key": apiKey, "x-contentdock-mode": mode },
         body: JSON.stringify({ title, channel, tone: "klar, nahbar und professionell" }),
       });
       const data = (await response.json()) as GeneratedCopy & { error?: string };
@@ -132,7 +134,7 @@ export function ContentComposer({
                 <label className="composer-field">Datum<input type="date" defaultValue="2026-08-30" /></label>
                 <label className="composer-field">Uhrzeit<input type="time" defaultValue="11:00" /></label>
               </div>
-              <p className="composer-plan__notice"><CalendarDays aria-hidden="true" /> Im Demo-MVP wird ein Entwurf angelegt. Ein Live-Upload startet erst nach Provider-Freigabe und deiner finalen Bestätigung.</p>
+              <p className="composer-plan__notice"><CalendarDays aria-hidden="true" /> Entwurf und Planung funktionieren auch in der Demo. Ein Live-Upload startet erst mit aktivem Abo, Provider-Freigabe und deiner finalen Bestätigung.</p>
             </div>
           ) : null}
         </div>
