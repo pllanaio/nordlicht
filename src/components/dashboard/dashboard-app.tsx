@@ -3,26 +3,33 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bell,
   CalendarDays,
   CheckCircle2,
   ChevronRight,
+  CircleAlert,
   CircleDollarSign,
+  ExternalLink,
   FileImage,
   Home,
   ImageIcon,
+  Instagram,
   LayoutGrid,
+  Link2,
   Linkedin,
   LockKeyhole,
   Menu,
+  Music2,
   Plug,
   Plus,
   Search,
+  ShieldCheck,
   Sparkles,
   TrendingUp,
+  Unplug,
   UsersRound,
   WandSparkles,
   X,
@@ -30,8 +37,11 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { ContentComposer } from "@/components/dashboard/content-composer";
 import { scheduleItems as initialScheduleItems, weekdays, type Channel, type ScheduleItem } from "@/lib/data";
+import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/contracts";
 
 type View = "Übersicht" | "Kalender" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
+
+type ConnectorFeedback = { provider?: string; status: string };
 
 const navItems: Array<{ name: View; icon: typeof Home }> = [
   { name: "Übersicht", icon: Home },
@@ -157,7 +167,151 @@ function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: 
   );
 }
 
-function FeatureView({ view, onCreate, demo }: { view: Exclude<View, "Übersicht">; onCreate: () => void; demo: boolean }) {
+const demoConnectors: SocialConnectorCard[] = [
+  {
+    provider: "instagram",
+    label: "Instagram",
+    description: "Professional Account für Posts, Reels und Insights verbinden.",
+    docsUrl: "https://developers.facebook.com/docs/instagram-platform/instagram-api-with-instagram-login/business-login",
+    configured: true,
+    connection: {
+      provider: "instagram",
+      accountId: "demo-instagram",
+      displayName: "@nordlicht.studio",
+      scopes: ["instagram_business_basic", "instagram_business_content_publish"],
+      connectedAt: "2026-08-20T09:00:00.000Z",
+    },
+  },
+  {
+    provider: "linkedin",
+    label: "LinkedIn",
+    description: "Persönliches Profil für geplante LinkedIn-Beiträge verbinden.",
+    docsUrl: "https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication",
+    configured: true,
+    connection: {
+      provider: "linkedin",
+      accountId: "demo-linkedin",
+      displayName: "Nordlicht Studio",
+      scopes: ["openid", "profile", "w_member_social"],
+      connectedAt: "2026-08-21T09:00:00.000Z",
+    },
+  },
+  {
+    provider: "tiktok",
+    label: "TikTok",
+    description: "TikTok-Konto für geprüfte Direct Posts und Video-Uploads verbinden.",
+    docsUrl: "https://developers.tiktok.com/doc/login-kit-web",
+    configured: true,
+    connection: {
+      provider: "tiktok",
+      accountId: "demo-tiktok",
+      displayName: "@nordlicht.studio",
+      scopes: ["user.info.basic", "video.publish"],
+      connectedAt: "2026-08-19T09:00:00.000Z",
+    },
+  },
+];
+
+const socialProviderIcons: Record<SocialProviderId, typeof Instagram> = {
+  instagram: Instagram,
+  linkedin: Linkedin,
+  tiktok: Music2,
+};
+
+function IntegrationsView({
+  connectors,
+  demo,
+  onSubscribe,
+}: {
+  connectors: SocialConnectorCard[];
+  demo: boolean;
+  onSubscribe: () => void;
+}) {
+  const socialConnectors = demo ? demoConnectors : connectors;
+
+  return (
+    <div className="integrations-panel">
+      <div className="integrations-panel__intro">
+        <div>
+          <span className="feature-kicker">Social Publishing</span>
+          <h2>Deine Accounts. Sicher verbunden.</h2>
+          <p>ContentDock erhält nur die freigegebenen OAuth-Berechtigungen. Deine Plattform-Passwörter bleiben immer beim jeweiligen Anbieter.</p>
+        </div>
+        <span className="integrations-panel__security"><ShieldCheck aria-hidden="true" /> OAuth 2.0 · verschlüsselte Tokens</span>
+      </div>
+
+      <div className="social-connector-grid">
+        {socialConnectors.map((connector) => {
+          const Icon = socialProviderIcons[connector.provider];
+          const connected = Boolean(connector.connection);
+          return (
+            <article className={`social-connector social-connector--${connector.provider}`} key={connector.provider}>
+              <div className="social-connector__head">
+                <span className="social-connector__icon"><Icon aria-hidden="true" /></span>
+                <span className={`social-connector__status ${connected ? "is-connected" : connector.configured ? "is-ready" : "is-missing"}`}>
+                  {connected ? <><i /> Verbunden</> : connector.configured ? "Bereit" : "Konfiguration fehlt"}
+                </span>
+              </div>
+              <h3>{connector.label}</h3>
+              <p>{connector.description}</p>
+              {connector.connection ? (
+                <div className="social-connector__account">
+                  <span>{connector.connection.displayName.slice(0, 1).toLocaleUpperCase("de")}</span>
+                  <div><strong>{connector.connection.displayName}</strong><small>{connector.connection.scopes.length} Berechtigungen freigegeben</small></div>
+                </div>
+              ) : (
+                <div className="social-connector__notice">
+                  {connector.configured ? <Link2 aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
+                  <span>{connector.configured ? "Bereit für den offiziellen Login-Dialog." : "App-ID, Secret und Token-Schlüssel in Vercel hinterlegen."}</span>
+                </div>
+              )}
+              <div className="social-connector__actions">
+                {demo ? (
+                  <button className="secondary-button" onClick={onSubscribe}>Eigenen Account verbinden</button>
+                ) : connector.connection ? (
+                  <form action={`/api/connect/${connector.provider}/disconnect`} method="post">
+                    <button className="secondary-button" type="submit"><Unplug size={15} aria-hidden="true" /> Trennen</button>
+                  </form>
+                ) : connector.configured ? (
+                  <a className="button" href={`/api/connect/${connector.provider}/start`}>Mit {connector.label} verbinden <ArrowRight size={15} aria-hidden="true" /></a>
+                ) : (
+                  <span className="social-connector__disabled">Noch nicht konfiguriert</span>
+                )}
+                <a className="social-connector__docs" href={connector.docsUrl} target="_blank" rel="noreferrer" aria-label={`${connector.label} Dokumentation öffnen`}><ExternalLink aria-hidden="true" /></a>
+              </div>
+            </article>
+          );
+        })}
+      </div>
+
+      <section className="connector-architecture">
+        <div><span>1</span><strong>Verbinden</strong><small>Offizieller Login beim Anbieter</small></div>
+        <ArrowRight aria-hidden="true" />
+        <div><span>2</span><strong>Freigeben</strong><small>Nur benötigte Berechtigungen</small></div>
+        <ArrowRight aria-hidden="true" />
+        <div><span>3</span><strong>Automatisieren</strong><small>Planen, prüfen und veröffentlichen</small></div>
+      </section>
+
+      <div className="connector-grid connector-grid--secondary">
+        {["Mollie", "Odoo", "CapCut", "PhotoAI"].map((name, index) => (
+          <div key={name}><span><LayoutGrid aria-hidden="true" /></span><strong>{name}</strong><small>{index < 2 ? "Konfigurierbar" : "Partnerzugang / Übergabe"}</small><ChevronRight aria-hidden="true" /></div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FeatureView({
+  view,
+  onCreate,
+  demo,
+  connectors,
+}: {
+  view: Exclude<View, "Übersicht">;
+  onCreate: () => void;
+  demo: boolean;
+  connectors: SocialConnectorCard[];
+}) {
   const featureCopy: Record<Exclude<View, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
     Mediathek: { title: "Mediathek", text: "Rohmaterial, Entwürfe und veröffentlichte Assets an einem Ort.", icon: FileImage },
@@ -178,11 +332,7 @@ function FeatureView({ view, onCreate, demo }: { view: Exclude<View, "Übersicht
           <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button" onClick={demo ? onCreate : undefined}><UsersRound size={17} aria-hidden="true" /> {demo ? "Mit Abo prüfen" : "Review öffnen"}</button></section>
         </div>
       ) : view === "Integrationen" ? (
-        <div className="connector-grid">
-          {["Meta", "TikTok", "Mollie", "Odoo", "CapCut", "PhotoAI"].map((name, index) => (
-            <button key={name}><span><LayoutGrid aria-hidden="true" /></span><strong>{name}</strong><small>{index < 2 ? "App-Review erforderlich" : index < 4 ? "Konfigurierbar" : "Partnerzugang / Übergabe"}</small><ChevronRight aria-hidden="true" /></button>
-          ))}
-        </div>
+        <IntegrationsView connectors={connectors} demo={demo} onSubscribe={onCreate} />
       ) : (
         <div className="feature-view__empty">
           <Icon aria-hidden="true" /><h2>Für den MVP vorbereitet.</h2><p>Die Oberfläche und Adaptergrenzen sind angelegt. Verbinde die Provider-Credentials, um den Live-Flow zu aktivieren.</p>
@@ -193,15 +343,46 @@ function FeatureView({ view, onCreate, demo }: { view: Exclude<View, "Übersicht
   );
 }
 
-export function DashboardApp({ mode = "workspace" }: { mode?: "workspace" | "demo" }) {
+function connectorFeedbackMessage(feedback?: ConnectorFeedback) {
+  if (!feedback) return "";
+  const provider = feedback.provider ? `${feedback.provider.slice(0, 1).toLocaleUpperCase("de")}${feedback.provider.slice(1)}` : "Der Connector";
+  const messages: Record<string, string> = {
+    connected: `${provider} wurde erfolgreich verbunden.`,
+    disconnected: `${provider} wurde getrennt.`,
+    denied: `Die Verbindung mit ${provider} wurde abgebrochen.`,
+    invalid_state: "Die Verbindungsanfrage ist abgelaufen. Bitte starte sie erneut.",
+    configuration_required: `${provider} ist noch nicht vollständig konfiguriert.`,
+    failed: `${provider} konnte nicht verbunden werden. Bitte versuche es erneut.`,
+    unsupported: "Dieser Connector wird nicht unterstützt.",
+  };
+  return messages[feedback.status] ?? "Der Connector-Status wurde aktualisiert.";
+}
+
+export function DashboardApp({
+  mode = "workspace",
+  connectors = [],
+  initialView = "Übersicht",
+  connectorFeedback,
+}: {
+  mode?: "workspace" | "demo";
+  connectors?: SocialConnectorCard[];
+  initialView?: View;
+  connectorFeedback?: ConnectorFeedback;
+}) {
   const router = useRouter();
-  const [activeView, setActiveView] = useState<View>("Übersicht");
+  const [activeView, setActiveView] = useState<View>(initialView);
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [items, setItems] = useState(initialScheduleItems);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState(() => connectorFeedbackMessage(connectorFeedback));
   const isDemo = mode === "demo";
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(""), 4_200);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("de");
@@ -223,7 +404,6 @@ export function DashboardApp({ mode = "workspace" }: { mode?: "workspace" | "dem
     setItems((current) => [...current, nextItem]);
     setComposerOpen(false);
     setToast("Entwurf wurde für Sonntag angelegt.");
-    window.setTimeout(() => setToast(""), 3200);
   }
 
   function openCreate() {
@@ -263,7 +443,7 @@ export function DashboardApp({ mode = "workspace" }: { mode?: "workspace" | "dem
         </header>
         <div className="dashboard-content">
           {query && filteredItems.length !== items.length ? <div className="search-result-note">{filteredItems.length} Inhalte passen zu „{query}“.</div> : null}
-          {activeView === "Übersicht" ? <Overview items={filteredItems} onCreate={openCreate} demo={isDemo} /> : <FeatureView view={activeView} onCreate={openCreate} demo={isDemo} />}
+          {activeView === "Übersicht" ? <Overview items={filteredItems} onCreate={openCreate} demo={isDemo} /> : <FeatureView view={activeView} onCreate={openCreate} demo={isDemo} connectors={connectors} />}
         </div>
       </section>
       {!isDemo && composerOpen ? <ContentComposer onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}

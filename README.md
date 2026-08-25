@@ -37,6 +37,8 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 - Lokaler Medien-Upload mit Bild-/Video-Vorschau
 - KI-Captions und Hashtags per persönlichem OpenAI API-Key (ephemer, nicht gespeichert)
 - Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
+- OAuth-Connectoren für Instagram, LinkedIn und TikTok mit offiziellem Provider-Login
+- HMAC-gesicherter OAuth-State, minimale Scopes und AES-256-GCM-verschlüsselte Token-Cookies für den Testbetrieb
 - Mollie First-Payment-Flow als Basis für monatliche Abonnements
 - Serverseitiges Abo-Gate für Workspace und KI-Endpunkt
 - Signierte, kurzlebige Berechtigung erst nach autoritativ bestätigter Mollie-Zahlung
@@ -93,11 +95,26 @@ npm run build
 | `SUBSCRIPTION_SESSION_SECRET` | Signiert die kurzlebige Workspace-Berechtigung | Nein |
 | `OPENAI_API_KEY` | Optionaler serverseitiger KI-Fallback | Nein |
 | `META_APP_ID`, `META_APP_SECRET` | Meta OAuth/App-Review | Nein |
-| `META_GRAPH_VERSION` | Explizit pinbare Graph-Version | Nein |
+| `META_GRAPH_VERSION`, `META_GRAPH_HOST` | Explizit pinbare Instagram-Graph-Version und API-Host | Nein |
+| `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | LinkedIn OAuth und Member Posting | Nein |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | TikTok Login/Posting | Nein |
+| `OAUTH_STATE_SECRET` | Signiert kurzlebige OAuth-Anfragen gegen Login-CSRF | Nein |
+| `SOCIAL_TOKEN_ENCRYPTION_KEY` | 32-Byte-Base64-Key für AES-256-GCM | Nein |
 | `ODOO_BASE_URL`, `ODOO_DATABASE`, `ODOO_API_KEY` | Odoo JSON-2 | Nein |
 
 Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals Werte aus `.env.local` committen.
+
+### Social Connectoren
+
+Die produktive Integrationsansicht liegt unter `/dashboard` → `Integrationen` und bleibt durch das aktive Abonnement geschützt. Für jeden Provider muss im jeweiligen Developer-Portal exakt folgende Callback-URL eingetragen werden:
+
+```text
+https://<deine-domain>/api/connect/instagram/callback
+https://<deine-domain>/api/connect/linkedin/callback
+https://<deine-domain>/api/connect/tiktok/callback
+```
+
+Der Test-MVP speichert die Provider-Tokens ausschließlich in separaten, HTTP-only Cookies. Der gesamte Payload ist mit AES-256-GCM verschlüsselt; der Schlüssel bleibt serverseitig. Diese Variante ist für einen Vercel-Test und Einzelbenutzer gedacht. Vor Team-/Multi-Device-Betrieb wird derselbe Store gegen `social_connection` in PostgreSQL ausgetauscht, damit Token-Rotation, Widerruf und Audit-Logs zentral erfolgen.
 
 ## Provider-Realität
 
@@ -127,6 +144,7 @@ docs/                            Architektur und Capability-Matrix
 
 - Identity Provider und serverseitige Session-Validierung anbinden
 - PostgreSQL-Schema migrieren, Abo-Lebenszyklus persistieren und Tenant-Isolation/RLS aktivieren
+- Verschlüsselten Test-Cookie-Store der Social Connectoren durch den PostgreSQL-Store mit KMS-gestützter Schlüsselrotation ersetzen
 - Objekt-Storage plus signierte Upload-URLs ergänzen
 - Durable Job Queue für geplante Veröffentlichungen und Retries einführen
 - OAuth Token verschlüsselt speichern und rotieren

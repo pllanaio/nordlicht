@@ -4,8 +4,9 @@ Stand: 24. August 2026. Provider-Verträge, Scopes und Review-Anforderungen kön
 
 | Provider | MVP-Status | Produktionsfähigkeit | Harte Voraussetzung |
 |---|---|---|---|
-| Meta / Instagram | Adapter vorbereitet | Bilder, Videos/Reels und weitere unterstützte Medientypen für professionelle Konten | Meta App, OAuth, Scopes, Accounttyp, App-Review und öffentlich erreichbare Medien |
-| TikTok | Direct-Post-Adapter vorbereitet | Video/Foto direkt oder als Draft, abhängig von Scope | App-Registrierung, `video.publish`/`video.upload`, Creator-Consent, Domain-Verifikation und Audit |
+| Meta / Instagram | OAuth + Adapter vorbereitet | Bilder, Videos/Reels und weitere unterstützte Medientypen für professionelle Konten | Meta App, OAuth, Scopes, Accounttyp, App-Review und öffentlich erreichbare Medien |
+| LinkedIn | OAuth für Member-Profile vorbereitet | Member Posts; Organisationsseiten nach zusätzlicher Freigabe | LinkedIn App, `w_member_social`; Organisationszugriff und Adminrolle für Seiten |
+| TikTok | OAuth + Direct-Post-Adapter vorbereitet | Video/Foto direkt oder als Draft, abhängig von Scope | App-Registrierung, `video.publish`/`video.upload`, Creator-Consent, Domain-Verifikation und Audit |
 | Mollie | First Payment + Webhook-Fetch | Monatliche Subscriptions | API-Key, Customer, First Payment, Mandat und idempotente Webhooks |
 | Odoo 19 | JSON-2 Suchadapter | CRM-/Projekt-Sync | URL, Datenbank, API-Key und minimal berechtigter Bot-Nutzer |
 | CapCut | Empfehlung/Handoff | Partnerabhängig | Belastbarer Partner- oder öffentlicher API-Vertrag |
@@ -31,6 +32,16 @@ Primärquellen:
 - [Content Posting API: Get Started](https://developers.tiktok.com/doc/content-posting-api-get-started)
 - [Direct Post Reference](https://developers.tiktok.com/doc/content-posting-api-reference-direct-post)
 - [Content Sharing Guidelines](https://developers.tiktok.com/doc/content-sharing-guidelines)
+
+## LinkedIn
+
+Der MVP verbindet persönliche LinkedIn-Profile über OpenID Connect und fordert zusätzlich `w_member_social` für Beiträge im Namen des Mitglieds an. Organisationsseiten werden erst aktiviert, wenn das entsprechende LinkedIn-Produkt freigegeben ist und der angemeldete Nutzer die nötige Seitenrolle besitzt.
+
+Primärquellen:
+
+- [LinkedIn OAuth](https://learn.microsoft.com/en-us/linkedin/shared/authentication/authentication)
+- [Getting Access to LinkedIn APIs](https://learn.microsoft.com/en-us/linkedin/shared/authentication/getting-access)
+- [Sign in with LinkedIn using OpenID Connect](https://learn.microsoft.com/en-us/linkedin/consumer/integrations/self-serve/sign-in-with-linkedin-v2)
 
 ## Mollie
 

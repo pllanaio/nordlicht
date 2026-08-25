@@ -48,11 +48,15 @@ create table social_connection (
   provider text not null,
   provider_account_id text not null,
   display_name text not null,
+  profile_image_url text,
   encrypted_access_token bytea not null,
   encrypted_refresh_token bytea,
   token_expires_at timestamptz,
   scopes text[] not null default '{}',
+  status text not null default 'connected' check (status in ('connected', 'expired', 'revoked', 'error')),
+  last_verified_at timestamptz,
   created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
   unique (workspace_id, provider, provider_account_id)
 );
 

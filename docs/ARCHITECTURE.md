@@ -36,6 +36,17 @@ flowchart TD
 | Audience Review | Erklärbare Aktivitätssignale und manuelle Entscheidungen |
 | Integrations | OAuth-Connections, verschlüsselte Tokens und Odoo-Sync |
 
+## Social-OAuth
+
+1. Der abonnementgeschützte Start-Handler erzeugt einen HMAC-signierten, zehn Minuten gültigen `state`-Wert.
+2. Ein providerbezogenes HTTP-only Cookie bindet den Wert an denselben Browser und verhindert Login-CSRF.
+3. Meta, LinkedIn oder TikTok authentifiziert den Nutzer und leitet nur einen einmaligen Authorization Code zurück.
+4. Der Callback prüft Abo, Provider, Cookie und `state`, bevor der Code serverseitig gegen Tokens getauscht wird.
+5. Der Test-MVP verschlüsselt Tokens per AES-256-GCM in providerbezogenen HTTP-only Cookies. React erhält nur Accountname, Scopes und Ablaufdatum.
+6. Die Produktionsimplementierung schreibt denselben verschlüsselten Payload in `social_connection`; Browser-Cookies enthalten dann nur die normale Session-ID.
+
+Die Live-Demo führt keine OAuth-Requests aus. Client Secrets und Provider-Tokens werden weder an Client Components serialisiert noch in Logs geschrieben.
+
 ## Veröffentlichungspfad
 
 ```mermaid
