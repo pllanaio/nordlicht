@@ -94,6 +94,7 @@ npm run build
 | `NEXT_PUBLIC_APP_URL` | Redirects und Webhook-URL | Nein |
 | `MOLLIE_API_KEY` | Checkout und First Payment | Nein |
 | `SUBSCRIPTION_SESSION_SECRET` | Signiert die kurzlebige Workspace-Berechtigung | Nein |
+| `INTERNAL_TEST_ACCOUNTS` | Serverseitige Testkonten mit Passwort-Hash und festem Tarif | Nein |
 | `OPENAI_API_KEY` | Optionaler serverseitiger KI-Fallback | Nein |
 | `META_APP_ID`, `META_APP_SECRET` | ContentDock-App bei Meta; Nutzer verbinden sich anschließend selbst | Für Instagram-Connect |
 | `META_GRAPH_VERSION`, `META_GRAPH_HOST` | Explizit pinbare Instagram-Graph-Version und API-Host | Nein |
@@ -104,6 +105,26 @@ npm run build
 | `ODOO_BASE_URL`, `ODOO_DATABASE`, `ODOO_API_KEY` | Odoo JSON-2 | Nein |
 
 Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals Werte aus `.env.local` committen.
+
+### Interne Testkonten ohne Mollie-Zahlung
+
+Für Produkt- und Featuretests können Betreiber eigene Konten als bereits bezahlt simulieren. Der Tarif stammt dabei ausschließlich aus der serverseitigen Konfiguration; ein Browser, Query-Parameter oder Formular kann den Tarif nicht selbst hochstufen.
+
+Zuerst pro Testkonto ein starkes Passwort wählen und den scrypt-Hash erzeugen:
+
+```bash
+npm run test-account:hash -- 'dein-langes-einzigartiges-testpasswort'
+```
+
+Danach in Vercel unter `Project → Settings → Environment Variables` die Variable `INTERNAL_TEST_ACCOUNTS` als Sensitive Value anlegen. Für drei getrennte Stufen sieht der Wert einzeilig so aus:
+
+```json
+[{"email":"starter-test@example.com","name":"Starter Test","passwordHash":"scrypt$SALT$HASH","plan":"starter"},{"email":"studio-test@example.com","name":"Studio Test","passwordHash":"scrypt$SALT$HASH","plan":"studio"},{"email":"pro-test@example.com","name":"Pro Test","passwordHash":"scrypt$SALT$HASH","plan":"pro"}]
+```
+
+Den kompletten Platzhalterwert `scrypt$SALT$HASH` jeweils durch die vollständige Ausgabe des Befehls ersetzen. Für jedes Konto sollte ein eigener Hash verwendet werden. Zusätzlich muss `SUBSCRIPTION_SESSION_SECRET` mit mindestens 32 zufälligen Zeichen gesetzt sein. Nach dem Speichern ein neues Deployment auslösen.
+
+Die Anmeldung erfolgt regulär über `/login`. Nach erfolgreicher Prüfung erzeugt der Server eine signierte, 24 Stunden gültige HTTP-only-Sitzung. Im Workspace werden Tarif und Kennzeichnung `Testkonto` angezeigt. Starter sieht Teamfreigaben als Studio-Feature gesperrt; Starter und Studio sehen Trendradar sowie Algorithmus-Signale als Pro-Features gesperrt. Unter `Abrechnung` zeigt die Tarifmatrix den simulierten Zugriff. Abmelden und mit dem nächsten Testkonto anmelden ermöglicht den direkten Stufenvergleich. Es wird weder ein Mollie-Customer noch eine Zahlung oder Rechnung erzeugt.
 
 ### Social Connectoren
 

@@ -6,8 +6,7 @@ import {
   subscriptionCookieName,
   verifyCheckoutState,
 } from "@/lib/subscription-access";
-
-const allowedPlans = new Set(["starter", "studio", "pro"]);
+import { isPlanId } from "@/lib/plans";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { paymentId?: string; state?: string };
@@ -21,7 +20,7 @@ export async function POST(request: Request) {
     if (payment.status !== "paid") {
       return NextResponse.json({ error: "Die Zahlung ist noch nicht bestätigt." }, { status: 409 });
     }
-    if (typeof plan !== "string" || !allowedPlans.has(plan)) {
+    if (!isPlanId(plan)) {
       return NextResponse.json({ error: "Der Zahlungsplan konnte nicht zugeordnet werden." }, { status: 422 });
     }
 

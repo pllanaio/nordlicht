@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowLeft, Check } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { LoginForm } from "@/components/login-form";
+import { hasInternalTestAccounts } from "@/lib/internal-test-accounts";
 
 export const metadata: Metadata = { title: "Anmelden" };
 
@@ -12,6 +13,7 @@ export default async function LoginPage({
   searchParams: Promise<{ plan?: string; reason?: string }>;
 }) {
   const { plan, reason } = await searchParams;
+  const testAccessConfigured = hasInternalTestAccounts();
   return (
     <main className="auth-page">
       <section className="auth-page__panel">
@@ -28,7 +30,7 @@ export default async function LoginPage({
             <div><Link href="/demo">Live-Demo</Link><Link href="/#preise">Abo auswählen</Link></div>
           </div>
         ) : null}
-        <LoginForm plan={plan} />
+        <LoginForm plan={plan} testAccessConfigured={testAccessConfigured} />
       </section>
       <aside className="auth-page__aside">
         <div>
@@ -40,7 +42,7 @@ export default async function LoginPage({
             <li><Check aria-hidden="true" /> 3 Kanäle verbunden</li>
           </ul>
         </div>
-        <p>Die Live-Demo ist öffentlich. Der produktive Workspace bleibt abonnementgeschützt.</p>
+        <p>Die Live-Demo ist öffentlich. Mollie-Abos und interne Testkonten werden ausschließlich serverseitig freigeschaltet.</p>
       </aside>
     </main>
   );

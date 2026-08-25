@@ -3,15 +3,16 @@ import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { isPlanId, type PlanId } from "@/lib/plans";
 
 export const subscriptionCookieName = "contentdock_subscription";
 
-const allowedPlans = new Set(["starter", "studio", "pro"]);
-
 export type SubscriptionEntitlement = {
   paymentId: string;
-  plan: string;
+  plan: PlanId;
   expiresAt: number;
+  source: "mollie" | "internal-test";
+  displayName?: string;
 };
 
 function getSigningSecret() {
@@ -42,13 +43,20 @@ export function verifyCheckoutState(paymentId: string, state: string) {
   return Boolean(expected && signaturesMatch(expected, state));
 }
 
-export function createSubscriptionToken(input: { paymentId: string; plan: string }) {
-  if (!allowedPlans.has(input.plan)) throw new Error("Unknown subscription plan");
+export function createSubscriptionToken(input: {
+  paymentId: string;
+  plan: PlanId;
+  source?: SubscriptionEntitlement["source"];
+  displayName?: string;
+}) {
+  if (!isPlanId(input.plan)) throw new Error("Unknown subscription plan");
 
   const entitlement: SubscriptionEntitlement = {
     paymentId: input.paymentId,
     plan: input.plan,
     expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    source: input.source ?? "mollie",
+    displayName: input.displayName?.slice(0, 80),
   };
   const payload = Buffer.from(JSON.stringify(entitlement)).toString("base64url");
   const signature = sign(`entitlement:${payload}`);
@@ -64,16 +72,25 @@ function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null 
   if (!expected || !signaturesMatch(expected, signature)) return null;
 
   try {
-    const entitlement = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as SubscriptionEntitlement;
+    const entitlement = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as Partial<SubscriptionEntitlement>;
+    const source = entitlement.source ?? "mollie";
     if (
       typeof entitlement.paymentId !== "string" ||
-      !allowedPlans.has(entitlement.plan) ||
+      !isPlanId(entitlement.plan) ||
       typeof entitlement.expiresAt !== "number" ||
-      entitlement.expiresAt <= Date.now()
+      entitlement.expiresAt <= Date.now() ||
+      (source !== "mollie" && source !== "internal-test") ||
+      (entitlement.displayName !== undefined && typeof entitlement.displayName !== "string")
     ) {
       return null;
     }
-    return entitlement;
+    return {
+      paymentId: entitlement.paymentId,
+      plan: entitlement.plan,
+      expiresAt: entitlement.expiresAt,
+      source,
+      displayName: entitlement.displayName,
+    };
   } catch {
     return null;
   }

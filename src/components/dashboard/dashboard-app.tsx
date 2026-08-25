@@ -20,6 +20,7 @@ import {
   Link2,
   Linkedin,
   LockKeyhole,
+  LogOut,
   Menu,
   Music2,
   Plug,
@@ -35,19 +36,22 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ContentComposer } from "@/components/dashboard/content-composer";
+import { logout } from "@/app/actions/auth";
 import { scheduleItems as initialScheduleItems, weekdays, type Channel, type ScheduleItem } from "@/lib/data";
 import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/contracts";
+import { minimumPlanFor, planCatalog, planIds, planIncludes, type PlanFeature, type PlanId } from "@/lib/plans";
 
-type View = "Übersicht" | "Kalender" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
+export type DashboardView = "Übersicht" | "Kalender" | "Freigaben" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
 
 type ConnectorFeedback = { provider?: string; status: string };
 
-const navItems: Array<{ name: View; icon: typeof Home }> = [
+const navItems: Array<{ name: DashboardView; icon: typeof Home; feature?: PlanFeature }> = [
   { name: "Übersicht", icon: Home },
   { name: "Kalender", icon: CalendarDays },
+  { name: "Freigaben", icon: UsersRound, feature: "team_approvals" },
   { name: "Mediathek", icon: ImageIcon },
   { name: "KI-Studio", icon: WandSparkles },
-  { name: "Trends", icon: TrendingUp },
+  { name: "Trends", icon: TrendingUp, feature: "trend_radar" },
   { name: "Integrationen", icon: Plug },
   { name: "Abrechnung", icon: CircleDollarSign },
 ];
@@ -107,11 +111,23 @@ function WeekPlanner({ items }: { items: ScheduleItem[] }) {
   );
 }
 
-function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: () => void; demo: boolean }) {
+function Overview({
+  items,
+  onCreate,
+  demo,
+  displayName,
+  trendAccess,
+}: {
+  items: ScheduleItem[];
+  onCreate: () => void;
+  demo: boolean;
+  displayName: string;
+  trendAccess: boolean;
+}) {
   return (
     <>
       <header className="dashboard-heading">
-        <div><h1>{demo ? "Live-Demo: Nordlicht Studio" : "Guten Morgen, Lea."}</h1><p>{demo ? "Erstelle und plane Content – nur das Veröffentlichen bleibt gesperrt." : "Dein Content für diese Woche ist fast bereit."}</p></div>
+        <div><h1>{demo ? "Live-Demo: Nordlicht Studio" : `Guten Morgen, ${displayName}.`}</h1><p>{demo ? "Erstelle und plane Content – nur das Veröffentlichen bleibt gesperrt." : "Dein Content für diese Woche ist fast bereit."}</p></div>
         <button className="button dashboard-heading__button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
       </header>
       <div className="dashboard-grid">
@@ -152,14 +168,21 @@ function Overview({ items, onCreate, demo }: { items: ScheduleItem[]; onCreate: 
             </div>
             <button className="button" onClick={onCreate}>Weiter bearbeiten <ArrowRight size={17} aria-hidden="true" /></button>
           </section>
-          <section className="trend-radar">
-            <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
-            <div className="trend-radar__signal">
-              <TrendingUp aria-hidden="true" />
-              <div><strong>Behind-the-scenes Formate gewinnen an Tempo</strong><p>Mehr Marken setzen auf authentische Einblicke. Engagement steigt.</p></div>
-              <button>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
-            </div>
-          </section>
+          {trendAccess ? (
+            <section className="trend-radar">
+              <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
+              <div className="trend-radar__signal">
+                <TrendingUp aria-hidden="true" />
+                <div><strong>Behind-the-scenes Formate gewinnen an Tempo</strong><p>Mehr Marken setzen auf authentische Einblicke. Engagement steigt.</p></div>
+                <button>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
+              </div>
+            </section>
+          ) : (
+            <section className="trend-radar trend-radar--locked">
+              <LockKeyhole aria-hidden="true" />
+              <div><span className="feature-kicker">Pro-Feature</span><h2>Trendradar</h2><p>Trend- und Algorithmus-Signale sind im Pro-Tarif verfügbar.</p></div>
+            </section>
+          )}
         </aside>
       </div>
     </>
@@ -257,19 +280,67 @@ function IntegrationsView({
   );
 }
 
+function LockedFeature({ plan, feature }: { plan: PlanId; feature: PlanFeature }) {
+  const requiredPlan = minimumPlanFor(feature);
+  const featureLabel = feature === "team_approvals" ? "Teamfreigaben" : "Trendradar";
+  return (
+    <div className="feature-view__locked">
+      <span><LockKeyhole aria-hidden="true" /></span>
+      <div>
+        <span className="feature-kicker">In deinem Testtarif gesperrt</span>
+        <h2>{featureLabel} ist ein {planCatalog[requiredPlan].label}-Feature.</h2>
+        <p>Du testest gerade {planCatalog[plan].label}. Melde dich mit einem {planCatalog[requiredPlan].label}-Testkonto{requiredPlan === "studio" ? " oder Pro-Testkonto" : ""} an, um diesen Bereich zu prüfen.</p>
+        <Link className="button" href="/login">Anderes Testkonto verwenden <ArrowRight size={16} aria-hidden="true" /></Link>
+      </div>
+    </div>
+  );
+}
+
+function BillingView({ plan, internalTest }: { plan: PlanId; internalTest: boolean }) {
+  return (
+    <div className="plan-overview">
+      <section className="plan-overview__current">
+        <div>
+          <span className="feature-kicker">Aktiver Tarif</span>
+          <h2>{planCatalog[plan].label}</h2>
+          <p>{planCatalog[plan].summary}</p>
+        </div>
+        <div className="plan-overview__price"><strong>{planCatalog[plan].price}</strong><span>/ Monat</span></div>
+        {internalTest ? <p className="plan-overview__test"><ShieldCheck aria-hidden="true" /> Interne Abo-Simulation – keine Mollie-Zahlung und keine Rechnung.</p> : null}
+      </section>
+      <section className="plan-overview__matrix" aria-labelledby="plan-matrix-title">
+        <div><span className="feature-kicker">Stufentest</span><h2 id="plan-matrix-title">Feature-Zugriff je Tarif</h2></div>
+        <div className="plan-overview__plans">
+          {planIds.map((planId) => (
+            <article className={planId === plan ? "is-current" : ""} key={planId}>
+              <header><strong>{planCatalog[planId].label}</strong>{planId === plan ? <span>Aktiv</span> : null}</header>
+              <ul>{planCatalog[planId].features.map((feature) => <li key={feature}><CheckCircle2 aria-hidden="true" /> {feature}</li>)}</ul>
+            </article>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function FeatureView({
   view,
   onCreate,
   demo,
   connectors,
+  plan,
+  internalTest,
 }: {
-  view: Exclude<View, "Übersicht">;
+  view: Exclude<DashboardView, "Übersicht">;
   onCreate: () => void;
   demo: boolean;
   connectors: SocialConnectorCard[];
+  plan: PlanId;
+  internalTest: boolean;
 }) {
-  const featureCopy: Record<Exclude<View, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
+  const featureCopy: Record<Exclude<DashboardView, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
+    Freigaben: { title: "Teamfreigaben", text: "Prüfe Inhalte gemeinsam, sammle Feedback und dokumentiere Entscheidungen.", icon: UsersRound },
     Mediathek: { title: "Mediathek", text: "Rohmaterial, Entwürfe und veröffentlichte Assets an einem Ort.", icon: FileImage },
     "KI-Studio": { title: "KI-Studio", text: "Erzeuge Captions und Hashtags mit deinem eigenen API-Key — ohne dauerhafte Speicherung.", icon: Sparkles },
     Trends: { title: "Trendradar & Zielgruppenqualität", text: "Quellenbasierte Format-Signale und eine faire, manuelle Prüfung verdächtiger Profile.", icon: TrendingUp },
@@ -278,17 +349,28 @@ function FeatureView({
   };
   const feature = featureCopy[view];
   const Icon = feature.icon;
+  const restrictedFeature = view === "Trends" ? "trend_radar" : view === "Freigaben" ? "team_approvals" : null;
+  const restricted = !demo && Boolean(restrictedFeature && !planIncludes(plan, restrictedFeature));
 
   return (
     <div className="feature-view">
       <header><span><Icon aria-hidden="true" /></span><div><h1>{feature.title}</h1><p>{feature.text}</p></div></header>
-      {view === "Trends" ? (
+      {restricted && restrictedFeature ? (
+        <LockedFeature plan={plan} feature={restrictedFeature} />
+      ) : view === "Trends" ? (
         <div className="feature-view__split">
           <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button">Test erstellen</button></section>
           <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button"><UsersRound size={17} aria-hidden="true" /> Review öffnen</button></section>
         </div>
+      ) : view === "Freigaben" ? (
+        <div className="feature-view__split">
+          <section><span className="feature-kicker">Freigabe offen</span><h2>TikTok-Reel final prüfen</h2><p>Caption, Format und Veröffentlichungszeit warten auf die Entscheidung des Teams.</p><button className="button">Review öffnen</button></section>
+          <section><span className="feature-kicker">Teamaktivität</span><h2>3 Entscheidungen diese Woche</h2><p>Alle Kommentare, Änderungen und Freigaben bleiben nachvollziehbar im Content-Verlauf dokumentiert.</p><button className="secondary-button"><UsersRound size={17} aria-hidden="true" /> Verlauf ansehen</button></section>
+        </div>
       ) : view === "Integrationen" ? (
         <IntegrationsView connectors={connectors} demo={demo} />
+      ) : view === "Abrechnung" ? (
+        <BillingView plan={plan} internalTest={internalTest} />
       ) : (
         <div className="feature-view__empty">
           <Icon aria-hidden="true" /><h2>Für den MVP vorbereitet.</h2><p>Die Oberfläche und Adaptergrenzen sind angelegt. Verbinde die Provider-Credentials, um den Live-Flow zu aktivieren.</p>
@@ -317,21 +399,29 @@ function connectorFeedbackMessage(feedback?: ConnectorFeedback) {
 export function DashboardApp({
   mode = "workspace",
   connectors = [],
+  displayName = "Lea",
+  internalTest = false,
+  plan = "pro",
   initialView = "Übersicht",
   connectorFeedback,
 }: {
   mode?: "workspace" | "demo";
   connectors?: SocialConnectorCard[];
-  initialView?: View;
+  displayName?: string;
+  internalTest?: boolean;
+  plan?: PlanId;
+  initialView?: DashboardView;
   connectorFeedback?: ConnectorFeedback;
 }) {
-  const [activeView, setActiveView] = useState<View>(initialView);
+  const [activeView, setActiveView] = useState<DashboardView>(initialView);
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [items, setItems] = useState(initialScheduleItems);
   const [toast, setToast] = useState(() => connectorFeedbackMessage(connectorFeedback));
   const isDemo = mode === "demo";
+  const activePlan = planCatalog[plan];
+  const profileInitial = isDemo ? "D" : (displayName.trim().slice(0, 1).toLocaleUpperCase("de") || "T");
 
   useEffect(() => {
     if (!toast) return;
@@ -370,11 +460,14 @@ export function DashboardApp({
       <aside className={`dashboard-sidebar${sidebarOpen ? " is-open" : ""}`}>
         <div className="dashboard-sidebar__brand"><Link href="/"><BrandMark compact /></Link><button onClick={() => setSidebarOpen(false)} aria-label="Menü schließen"><X /></button></div>
         <nav aria-label="Workspace-Navigation">
-          {navItems.map(({ name, icon: Icon }) => (
-            <button className={activeView === name ? "is-active" : ""} onClick={() => { setActiveView(name); setSidebarOpen(false); }} key={name}>
-              <Icon aria-hidden="true" /><span>{name}</span>
-            </button>
-          ))}
+          {navItems.map(({ name, icon: Icon, feature }) => {
+            const locked = !isDemo && Boolean(feature && !planIncludes(plan, feature));
+            return (
+              <button className={`${activeView === name ? "is-active" : ""}${locked ? " is-locked" : ""}`} onClick={() => { setActiveView(name); setSidebarOpen(false); }} key={name}>
+                <Icon aria-hidden="true" /><span>{name}</span>{locked ? <LockKeyhole className="dashboard-sidebar__lock" aria-label="In diesem Tarif gesperrt" /> : null}
+              </button>
+            );
+          })}
         </nav>
         <button className="dashboard-sidebar__collapse"><ChevronRight aria-hidden="true" /><span>Menü reduzieren</span></button>
       </aside>
@@ -388,13 +481,35 @@ export function DashboardApp({
         ) : null}
         <header className="dashboard-topbar">
           <button className="dashboard-topbar__menu" onClick={() => setSidebarOpen(true)} aria-label="Menü öffnen"><Menu /></button>
-          <button className="workspace-switcher"><LayoutGrid aria-hidden="true" /><span>Nordlicht Studio</span><ChevronRight aria-hidden="true" /></button>
+          <button className="workspace-switcher"><LayoutGrid aria-hidden="true" /><span>Nordlicht Studio</span>{!isDemo ? <em>{activePlan.label}{internalTest ? " · Test" : ""}</em> : null}<ChevronRight aria-hidden="true" /></button>
           <label className="dashboard-search"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Suchen (z. B. Inhalte, Kanäle, Vorlagen)" aria-label="Workspace durchsuchen" />{query ? <button onClick={() => setQuery("")} aria-label="Suche löschen"><X /></button> : null}</label>
-          <div className="dashboard-profile"><button aria-label="Benachrichtigungen"><Bell aria-hidden="true" /><i /></button><span>{isDemo ? "D" : "L"}</span><strong>{isDemo ? "Demo" : "Lea"}</strong></div>
+          <div className="dashboard-profile">
+            <button aria-label="Benachrichtigungen"><Bell aria-hidden="true" /><i /></button>
+            <span>{profileInitial}</span>
+            <div><strong>{isDemo ? "Demo" : displayName}</strong>{!isDemo ? <small>{activePlan.label}{internalTest ? " · Testkonto" : ""}</small> : null}</div>
+            {!isDemo ? <form action={logout}><button type="submit" aria-label="Abmelden" title="Abmelden"><LogOut aria-hidden="true" /></button></form> : null}
+          </div>
         </header>
         <div className="dashboard-content">
           {query && filteredItems.length !== items.length ? <div className="search-result-note">{filteredItems.length} Inhalte passen zu „{query}“.</div> : null}
-          {activeView === "Übersicht" ? <Overview items={filteredItems} onCreate={openCreate} demo={isDemo} /> : <FeatureView view={activeView} onCreate={openCreate} demo={isDemo} connectors={connectors} />}
+          {activeView === "Übersicht" ? (
+            <Overview
+              items={filteredItems}
+              onCreate={openCreate}
+              demo={isDemo}
+              displayName={displayName}
+              trendAccess={isDemo || planIncludes(plan, "trend_radar")}
+            />
+          ) : (
+            <FeatureView
+              view={activeView}
+              onCreate={openCreate}
+              demo={isDemo}
+              connectors={connectors}
+              plan={plan}
+              internalTest={internalTest}
+            />
+          )}
         </div>
       </section>
       {composerOpen ? <ContentComposer mode={mode} onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
