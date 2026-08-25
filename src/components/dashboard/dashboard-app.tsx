@@ -8,6 +8,7 @@ import {
   Bell,
   CalendarDays,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   CircleAlert,
   CircleDollarSign,
@@ -36,8 +37,9 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ContentComposer } from "@/components/dashboard/content-composer";
+import { ScheduleItemDialog } from "@/components/dashboard/schedule-item-dialog";
 import { logout } from "@/app/actions/auth";
-import { scheduleItems as initialScheduleItems, weekdays, type Channel, type ScheduleItem } from "@/lib/data";
+import { calendarAnchorDate, scheduleItems as initialScheduleItems, type Channel, type ScheduleItem } from "@/lib/data";
 import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/contracts";
 import { minimumPlanFor, planCatalog, planIds, planIncludes, type PlanFeature, type PlanId } from "@/lib/plans";
 
@@ -63,46 +65,124 @@ const channelClass: Record<Channel, string> = {
   YouTube: "youtube",
 };
 
+function parseCalendarDate(date: string) {
+  return new Date(`${date}T12:00:00`);
+}
+
+function toCalendarDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addCalendarDays(date: string, amount: number) {
+  const result = parseCalendarDate(date);
+  result.setDate(result.getDate() + amount);
+  return toCalendarDate(result);
+}
+
+function getWeekStart(date: string) {
+  const result = parseCalendarDate(date);
+  const daysSinceMonday = (result.getDay() + 6) % 7;
+  result.setDate(result.getDate() - daysSinceMonday);
+  return toCalendarDate(result);
+}
+
+function formatCalendarMoment(date: string, time: string) {
+  const formattedDate = new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+  }).format(parseCalendarDate(date));
+  return `${formattedDate}, ${time} Uhr`;
+}
+
+function getWeekDays(weekStart: string) {
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = addCalendarDays(weekStart, index);
+    return {
+      date,
+      day: parseCalendarDate(date).getDate(),
+      short: new Intl.DateTimeFormat("de-DE", { weekday: "short" }).format(parseCalendarDate(date)).replace(".", ""),
+    };
+  });
+}
+
+function formatWeekRange(weekStart: string) {
+  const weekEnd = addCalendarDays(weekStart, 6);
+  const start = parseCalendarDate(weekStart);
+  const end = parseCalendarDate(weekEnd);
+  const startLabel = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: start.getMonth() === end.getMonth() ? undefined : "short" }).format(start);
+  const endLabel = new Intl.DateTimeFormat("de-DE", { day: "numeric", month: "long", year: "numeric" }).format(end);
+  return `${startLabel} – ${endLabel}`;
+}
+
+function scheduleSlotTop(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const minuteOfDay = (hours * 60) + minutes;
+  return Math.max(10, Math.min(286, 14 + ((minuteOfDay - 540) / 720) * 280));
+}
+
 function ChannelIcon({ channel }: { channel: Channel }) {
   if (channel === "LinkedIn") return <Linkedin aria-hidden="true" size={15} />;
   return <span aria-hidden="true">{channel === "Instagram" ? "◎" : channel === "TikTok" ? "♪" : "▶"}</span>;
 }
 
-function ScheduleCard({ item }: { item: ScheduleItem }) {
+function ScheduleCard({ item, onOpen }: { item: ScheduleItem; onOpen: (id: string) => void }) {
   return (
-    <article className="schedule-card">
+    <button className="schedule-card" type="button" onClick={() => onOpen(item.id)} aria-label={`${item.title}, ${formatCalendarMoment(item.date, item.time)} – Details bearbeiten`}>
       <Image src={item.image} alt="" width={72} height={62} sizes="72px" />
       <div>
-        <small><span className={`channel-icon channel-icon--${channelClass[item.channel]}`}><ChannelIcon channel={item.channel} /></span>{item.time}</small>
+        <small><span className={`channel-icon channel-icon--${channelClass[item.channel]}`}><ChannelIcon channel={item.channel} /></span>{item.time} Uhr</small>
         <strong>{item.title}</strong>
         <em className={`status status--${item.status.toLowerCase()}`}>{item.status}</em>
       </div>
-    </article>
+    </button>
   );
 }
 
-function WeekPlanner({ items }: { items: ScheduleItem[] }) {
+function WeekPlanner({
+  items,
+  weekStart,
+  focusDate,
+  onOpenItem,
+  onPreviousWeek,
+  onNextWeek,
+}: {
+  items: ScheduleItem[];
+  weekStart: string;
+  focusDate: string;
+  onOpenItem: (id: string) => void;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
+}) {
+  const days = getWeekDays(weekStart);
   return (
     <section className="week-planner">
       <div className="week-planner__head">
-        <h2>Diese Woche</h2>
-        <span>24.–30. August</span>
+        <h2>Wochenansicht</h2>
+        <div className="week-planner__controls">
+          <button type="button" onClick={onPreviousWeek} aria-label="Vorherige Woche"><ChevronLeft aria-hidden="true" /></button>
+          <span>{formatWeekRange(weekStart)}</span>
+          <button type="button" onClick={onNextWeek} aria-label="Nächste Woche"><ChevronRight aria-hidden="true" /></button>
+        </div>
       </div>
       <div className="week-planner__days">
         <div className="week-planner__time-space" />
-        {weekdays.map((day) => (
-          <div className={day.day === 26 ? "is-selected" : ""} key={day.day}><span>{day.short}</span><strong>{day.day}</strong></div>
+        {days.map((day) => (
+          <div className={day.date === focusDate ? "is-selected" : ""} key={day.date}><span>{day.short}</span><strong>{day.day}</strong></div>
         ))}
       </div>
       <div className="week-planner__body">
         <div className="week-planner__times"><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span></div>
         <div className="week-planner__columns">
-          {weekdays.map((day) => (
-            <div className={`week-column${day.day === 26 ? " is-selected" : ""}`} key={day.day}>
-              {items.filter((item) => item.day === day.day).map((item) => (
-                <div className={`schedule-slot schedule-slot--${item.time.slice(0, 2)}`} key={item.id}><ScheduleCard item={item} /></div>
+          {days.map((day) => (
+            <div className={`week-column${day.date === focusDate ? " is-selected" : ""}`} key={day.date}>
+              {items.filter((item) => item.date === day.date).map((item) => (
+                <div className="schedule-slot" style={{ top: scheduleSlotTop(item.time) }} key={item.id}><ScheduleCard item={item} onOpen={onOpenItem} /></div>
               ))}
-              {day.day === 26 ? <div className="current-time" aria-label="Aktuelle Zeit"><span /></div> : null}
+              {day.date === focusDate ? <div className="current-time" aria-label="Ausgewählter Tag"><span /></div> : null}
             </div>
           ))}
         </div>
@@ -117,12 +197,22 @@ function Overview({
   demo,
   displayName,
   trendAccess,
+  weekStart,
+  focusDate,
+  onOpenItem,
+  onPreviousWeek,
+  onNextWeek,
 }: {
   items: ScheduleItem[];
   onCreate: () => void;
   demo: boolean;
   displayName: string;
   trendAccess: boolean;
+  weekStart: string;
+  focusDate: string;
+  onOpenItem: (id: string) => void;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
 }) {
   return (
     <>
@@ -132,7 +222,7 @@ function Overview({
       </header>
       <div className="dashboard-grid">
         <div className="dashboard-grid__main">
-          <WeekPlanner items={items} />
+          <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} />
           <div className="dashboard-lower">
             <section className="channel-table">
               <h2>Kanäle</h2>
@@ -326,6 +416,12 @@ function BillingView({ plan, internalTest }: { plan: PlanId; internalTest: boole
 function FeatureView({
   view,
   onCreate,
+  items,
+  weekStart,
+  focusDate,
+  onOpenItem,
+  onPreviousWeek,
+  onNextWeek,
   demo,
   connectors,
   plan,
@@ -333,6 +429,12 @@ function FeatureView({
 }: {
   view: Exclude<DashboardView, "Übersicht">;
   onCreate: () => void;
+  items: ScheduleItem[];
+  weekStart: string;
+  focusDate: string;
+  onOpenItem: (id: string) => void;
+  onPreviousWeek: () => void;
+  onNextWeek: () => void;
   demo: boolean;
   connectors: SocialConnectorCard[];
   plan: PlanId;
@@ -357,6 +459,14 @@ function FeatureView({
       <header><span><Icon aria-hidden="true" /></span><div><h1>{feature.title}</h1><p>{feature.text}</p></div></header>
       {restricted && restrictedFeature ? (
         <LockedFeature plan={plan} feature={restrictedFeature} />
+      ) : view === "Kalender" ? (
+        <div className="calendar-workspace">
+          <div className="calendar-workspace__toolbar">
+            <div><strong>{items.length} Beiträge</strong><span>Klicke einen Post an, um Details zu sehen, ihn zu bearbeiten, zu verschieben oder zu löschen.</span></div>
+            <button className="button" type="button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
+          </div>
+          <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} />
+        </div>
       ) : view === "Trends" ? (
         <div className="feature-view__split">
           <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button">Test erstellen</button></section>
@@ -417,7 +527,11 @@ export function DashboardApp({
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [items, setItems] = useState(initialScheduleItems);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [calendarWeekStart, setCalendarWeekStart] = useState(calendarAnchorDate);
+  const [calendarFocusDate, setCalendarFocusDate] = useState(addCalendarDays(calendarAnchorDate, 2));
   const [toast, setToast] = useState(() => connectorFeedbackMessage(connectorFeedback));
   const isDemo = mode === "demo";
   const activePlan = planCatalog[plan];
@@ -434,29 +548,65 @@ export function DashboardApp({
     if (!normalized) return items;
     return items.filter((item) => `${item.title} ${item.channel} ${item.status}`.toLocaleLowerCase("de").includes(normalized));
   }, [items, query]);
+  const selectedItem = selectedItemId ? items.find((item) => item.id === selectedItemId) : undefined;
 
-  function addContent(content: { title: string; channel: Channel; caption: string }) {
+  function addContent(content: { title: string; channel: Channel; caption: string; date: string; time: string }) {
     const nextItem: ScheduleItem = {
       id: `new-${Date.now()}`,
-      day: 30,
-      weekday: "So",
-      time: "11:00",
+      date: content.date,
+      time: content.time,
       title: content.title || "Neuer Content",
+      caption: content.caption,
       channel: content.channel,
       status: "Entwurf",
       image: "/media/design-studio.webp",
     };
     setItems((current) => [...current, nextItem]);
+    setCalendarWeekStart(getWeekStart(content.date));
+    setCalendarFocusDate(content.date);
     setComposerOpen(false);
-    setToast("Entwurf wurde für Sonntag angelegt.");
+    setToast(`Entwurf für ${formatCalendarMoment(content.date, content.time)} angelegt.`);
   }
 
   function openCreate() {
     setComposerOpen(true);
   }
 
+  function openItem(id: string) {
+    const item = items.find((candidate) => candidate.id === id);
+    if (item) setCalendarFocusDate(item.date);
+    setSelectedItemId(id);
+  }
+
+  function saveItem(updatedItem: ScheduleItem) {
+    setItems((current) => current.map((item) => item.id === updatedItem.id ? updatedItem : item));
+    setCalendarWeekStart(getWeekStart(updatedItem.date));
+    setCalendarFocusDate(updatedItem.date);
+    setSelectedItemId(null);
+    setToast(`Beitrag auf ${formatCalendarMoment(updatedItem.date, updatedItem.time)} verschoben und gespeichert.`);
+  }
+
+  function deleteItem(id: string) {
+    setItems((current) => current.filter((item) => item.id !== id));
+    setSelectedItemId(null);
+    setToast("Beitrag wurde aus dem Demo-Kalender gelöscht.");
+  }
+
+  function changeWeek(amount: number) {
+    setCalendarWeekStart((current) => addCalendarDays(current, amount * 7));
+    setCalendarFocusDate((current) => addCalendarDays(current, amount * 7));
+  }
+
+  function toggleSidebar() {
+    if (window.matchMedia("(max-width: 720px)").matches) {
+      setSidebarOpen(false);
+      return;
+    }
+    setSidebarCollapsed((current) => !current);
+  }
+
   return (
-    <main className={`dashboard-app${isDemo ? " dashboard-app--demo" : ""}`}>
+    <main className={`dashboard-app${isDemo ? " dashboard-app--demo" : ""}${sidebarCollapsed ? " dashboard-app--collapsed" : ""}`}>
       <aside className={`dashboard-sidebar${sidebarOpen ? " is-open" : ""}`}>
         <div className="dashboard-sidebar__brand"><Link href="/"><BrandMark compact /></Link><button onClick={() => setSidebarOpen(false)} aria-label="Menü schließen"><X /></button></div>
         <nav aria-label="Workspace-Navigation">
@@ -469,7 +619,7 @@ export function DashboardApp({
             );
           })}
         </nav>
-        <button className="dashboard-sidebar__collapse"><ChevronRight aria-hidden="true" /><span>Menü reduzieren</span></button>
+        <button className="dashboard-sidebar__collapse" type="button" onClick={toggleSidebar} aria-expanded={!sidebarCollapsed} aria-label={sidebarCollapsed ? "Seitenmenü erweitern" : "Seitenmenü reduzieren"}><ChevronRight aria-hidden="true" /><span>{sidebarCollapsed ? "Menü erweitern" : "Menü reduzieren"}</span></button>
       </aside>
 
       <section className="dashboard-shell">
@@ -480,7 +630,7 @@ export function DashboardApp({
           </div>
         ) : null}
         <header className="dashboard-topbar">
-          <button className="dashboard-topbar__menu" onClick={() => setSidebarOpen(true)} aria-label="Menü öffnen"><Menu /></button>
+          <button className="dashboard-topbar__menu" onClick={() => { setSidebarCollapsed(false); setSidebarOpen(true); }} aria-label="Menü öffnen"><Menu /></button>
           <button className="workspace-switcher"><LayoutGrid aria-hidden="true" /><span>Nordlicht Studio</span>{!isDemo ? <em>{activePlan.label}{internalTest ? " · Test" : ""}</em> : null}<ChevronRight aria-hidden="true" /></button>
           <label className="dashboard-search"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Suchen (z. B. Inhalte, Kanäle, Vorlagen)" aria-label="Workspace durchsuchen" />{query ? <button onClick={() => setQuery("")} aria-label="Suche löschen"><X /></button> : null}</label>
           <div className="dashboard-profile">
@@ -499,11 +649,22 @@ export function DashboardApp({
               demo={isDemo}
               displayName={displayName}
               trendAccess={isDemo || planIncludes(plan, "trend_radar")}
+              weekStart={calendarWeekStart}
+              focusDate={calendarFocusDate}
+              onOpenItem={openItem}
+              onPreviousWeek={() => changeWeek(-1)}
+              onNextWeek={() => changeWeek(1)}
             />
           ) : (
             <FeatureView
               view={activeView}
               onCreate={openCreate}
+              items={filteredItems}
+              weekStart={calendarWeekStart}
+              focusDate={calendarFocusDate}
+              onOpenItem={openItem}
+              onPreviousWeek={() => changeWeek(-1)}
+              onNextWeek={() => changeWeek(1)}
               demo={isDemo}
               connectors={connectors}
               plan={plan}
@@ -513,6 +674,7 @@ export function DashboardApp({
         </div>
       </section>
       {composerOpen ? <ContentComposer mode={mode} onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
+      {selectedItem ? <ScheduleItemDialog key={selectedItem.id} item={selectedItem} onClose={() => setSelectedItemId(null)} onSave={saveItem} onDelete={deleteItem} /> : null}
       {toast ? <div className="app-toast"><CheckCircle2 aria-hidden="true" /> {toast}</div> : null}
     </main>
   );

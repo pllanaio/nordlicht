@@ -33,7 +33,7 @@ export function ContentComposer({
 }: {
   mode: "workspace" | "demo";
   onClose: () => void;
-  onCreate: (content: { title: string; channel: Channel; caption: string }) => void;
+  onCreate: (content: { title: string; channel: Channel; caption: string; date: string; time: string }) => void;
 }) {
   const [step, setStep] = useState(1);
   const [preview, setPreview] = useState<string>("");
@@ -42,6 +42,8 @@ export function ContentComposer({
   const [apiKey, setApiKey] = useState("");
   const [caption, setCaption] = useState(demoCopy.caption);
   const [hashtags, setHashtags] = useState(demoCopy.hashtags);
+  const [date, setDate] = useState("2026-08-26");
+  const [time, setTime] = useState("11:00");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
 
@@ -131,8 +133,8 @@ export function ContentComposer({
               </div>
               <div className="composer-plan__fields">
                 <label className="composer-field">Kanal<select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}><option>Instagram</option><option>TikTok</option><option>LinkedIn</option><option>YouTube</option></select></label>
-                <label className="composer-field">Datum<input type="date" defaultValue="2026-08-30" /></label>
-                <label className="composer-field">Uhrzeit<input type="time" defaultValue="11:00" /></label>
+                <label className="composer-field">Datum<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
+                <label className="composer-field">Uhrzeit<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
               </div>
               <p className="composer-plan__notice"><CalendarDays aria-hidden="true" /> Entwurf und Planung funktionieren auch in der Demo. Ein Live-Upload startet erst mit aktivem Abo, Provider-Freigabe und deiner finalen Bestätigung.</p>
             </div>
@@ -141,7 +143,7 @@ export function ContentComposer({
 
         <footer className="composer__footer">
           <button className="composer-back" onClick={() => step === 1 ? close() : setStep((current) => current - 1)}><ArrowLeft size={17} aria-hidden="true" />{step === 1 ? "Abbrechen" : "Zurück"}</button>
-          {step < 3 ? <button className="button" onClick={() => setStep((current) => current + 1)} disabled={step === 1 && !title.trim()}>Weiter <ArrowRight size={17} aria-hidden="true" /></button> : <button className="button" onClick={() => onCreate({ title, channel, caption })}>Entwurf anlegen <Check size={17} aria-hidden="true" /></button>}
+          {step < 3 ? <button className="button" onClick={() => setStep((current) => current + 1)} disabled={step === 1 && !title.trim()}>Weiter <ArrowRight size={17} aria-hidden="true" /></button> : <button className="button" onClick={() => onCreate({ title, channel, caption, date, time })} disabled={!date || !time}>Entwurf anlegen <Check size={17} aria-hidden="true" /></button>}
         </footer>
       </section>
     </div>

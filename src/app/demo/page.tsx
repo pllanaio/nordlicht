@@ -1,8 +1,18 @@
 import type { Metadata } from "next";
-import { DashboardApp } from "@/components/dashboard/dashboard-app";
+import { DashboardApp, type DashboardView } from "@/components/dashboard/dashboard-app";
 import { getSocialConnectorCards } from "@/lib/integrations/social-connectors";
 
 export const metadata: Metadata = { title: "Live-Demo" };
+
+const demoViewByQuery: Record<string, DashboardView> = {
+  kalender: "Kalender",
+  freigaben: "Freigaben",
+  mediathek: "Mediathek",
+  "ki-studio": "KI-Studio",
+  trends: "Trends",
+  integrations: "Integrationen",
+  abrechnung: "Abrechnung",
+};
 
 export default async function DemoPage({
   searchParams,
@@ -14,7 +24,7 @@ export default async function DemoPage({
     <DashboardApp
       mode="demo"
       connectors={connectors}
-      initialView={query.view === "integrations" ? "Integrationen" : "Übersicht"}
+      initialView={query.view ? demoViewByQuery[query.view] ?? "Übersicht" : "Übersicht"}
       connectorFeedback={query.connection_status ? { provider: query.provider, status: query.connection_status } : undefined}
     />
   );

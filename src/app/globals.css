@@ -986,7 +986,17 @@ summary:focus-visible {
   display: grid;
   grid-template-columns: 206px minmax(0, 1fr);
   background: white;
+  transition: grid-template-columns 180ms ease;
 }
+
+.dashboard-app--collapsed { grid-template-columns: 76px minmax(0, 1fr); }
+.dashboard-app--collapsed .dashboard-sidebar__brand { padding: 0 15px; }
+.dashboard-app--collapsed .dashboard-sidebar nav button { justify-content: center; padding: 0; }
+.dashboard-app--collapsed .dashboard-sidebar nav span,
+.dashboard-app--collapsed .dashboard-sidebar__collapse span { display: none; }
+.dashboard-app--collapsed .dashboard-sidebar nav button .dashboard-sidebar__lock { margin-left: 0; }
+.dashboard-app--collapsed .dashboard-sidebar__collapse { justify-content: center; margin-inline: 14px; padding: 0; }
+.dashboard-app--collapsed .dashboard-sidebar__collapse svg { transform: rotate(0); }
 
 .dashboard-sidebar {
   position: sticky;
@@ -1051,6 +1061,7 @@ summary:focus-visible {
 .dashboard-sidebar nav button .dashboard-sidebar__lock { width: 14px; height: 14px; margin-left: auto; stroke-width: 1.8; }
 .dashboard-sidebar__collapse { margin: auto 14px 23px; color: var(--muted); }
 .dashboard-sidebar__collapse svg { transform: rotate(180deg); }
+.dashboard-sidebar__collapse:hover { background: #eceeef; color: var(--ink); }
 
 .dashboard-shell {
   min-width: 0;
@@ -1231,6 +1242,10 @@ summary:focus-visible {
 }
 
 .week-planner__head span { color: var(--muted); font-size: 10px; }
+.week-planner__controls { display: flex; align-items: center; gap: 9px; }
+.week-planner__controls button { width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 6px; background: white; color: var(--muted); }
+.week-planner__controls button:hover { border-color: var(--ink); color: var(--ink); }
+.week-planner__controls button svg { width: 14px; }
 .week-planner__days { min-width: 710px; height: 68px; display: grid; grid-template-columns: 52px repeat(7, 1fr); border-bottom: 1px solid var(--line); }
 .week-planner__days > div:not(.week-planner__time-space) { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 3px; font-size: 10px; }
 .week-planner__days strong { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 50%; font-size: 14px; }
@@ -1244,13 +1259,6 @@ summary:focus-visible {
 .week-column.is-selected { background: linear-gradient(to bottom, rgba(255, 240, 238, 0.8), rgba(255, 255, 255, 0)); }
 
 .schedule-slot { position: absolute; z-index: 2; left: 8px; }
-.schedule-slot--09 { top: 14px; }
-.schedule-slot--10 { top: 48px; }
-.schedule-slot--11 { top: 81px; }
-.schedule-slot--12 { top: 94px; }
-.schedule-slot--15 { top: 191px; }
-.schedule-slot--17 { top: 239px; }
-.schedule-slot--19 { top: 282px; }
 
 .schedule-card {
   width: 148px;
@@ -1263,7 +1271,15 @@ summary:focus-visible {
   padding: 5px;
   background: white;
   box-shadow: 0 4px 13px rgba(20, 24, 30, 0.05);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
 }
+
+.schedule-card:hover { z-index: 3; border-color: var(--coral); box-shadow: 0 8px 20px rgba(20, 24, 30, 0.12); transform: translateY(-1px); }
+.schedule-card:focus-visible { outline: 3px solid var(--coral-soft); border-color: var(--coral); }
 
 .schedule-card > img { width: 58px; height: 58px; object-fit: cover; border-radius: 5px; }
 .schedule-card > div { min-width: 0; display: flex; align-items: flex-start; flex-direction: column; }
@@ -1422,6 +1438,13 @@ summary:focus-visible {
 .feature-view__empty h2 { margin: 20px 0 8px; }
 .feature-view__empty p { max-width: 520px; margin: 0 0 24px; color: var(--muted); }
 
+.calendar-workspace { margin-top: 30px; }
+.calendar-workspace__toolbar { min-height: 70px; display: flex; align-items: center; justify-content: space-between; gap: 24px; border: 1px solid var(--line); border-bottom: 0; border-radius: var(--radius) var(--radius) 0 0; padding: 12px 16px; background: #fafbfb; }
+.calendar-workspace__toolbar > div { display: flex; flex-direction: column; gap: 3px; }
+.calendar-workspace__toolbar strong { font-size: 13px; }
+.calendar-workspace__toolbar span { color: var(--muted); font-size: 10px; }
+.calendar-workspace__toolbar + .week-planner { border-radius: 0 0 var(--radius) var(--radius); }
+
 .trend-radar--locked { min-height: 230px; display: flex; align-items: center; gap: 18px; border-style: dashed; padding: 24px; background: #fafbfb; }
 .trend-radar--locked > svg { width: 42px; height: 42px; flex: 0 0 auto; color: var(--coral-dark); }
 .trend-radar--locked h2 { margin: 4px 0 6px; }
@@ -1517,6 +1540,41 @@ summary:focus-visible {
 .composer__footer { min-height: 76px; display: flex; align-items: center; justify-content: space-between; padding: 0 24px; border-top: 1px solid var(--line); }
 .composer-back { display: flex; align-items: center; gap: 7px; border: 0; background: transparent; color: var(--muted); font-size: 12px; }
 
+.post-dialog {
+  width: min(100%, 860px);
+  max-height: calc(100svh - 48px);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-radius: 14px;
+  background: white;
+  box-shadow: 0 26px 90px rgba(10, 12, 15, 0.26);
+  overflow: hidden;
+}
+.post-dialog__header { min-height: 84px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--line); padding: 16px 24px; }
+.post-dialog__header span { color: var(--coral-dark); font-size: 10px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; }
+.post-dialog__header h2 { margin: 2px 0 0; font-size: 22px; letter-spacing: -0.04em; }
+.post-dialog__header button { width: 40px; height: 40px; display: grid; place-items: center; border: 0; border-radius: 7px; background: var(--surface-soft); }
+.post-dialog__header button svg { width: 18px; }
+.post-dialog__body { min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: 24px; overflow-y: auto; padding: 24px; }
+.post-dialog__preview img { width: 100%; height: 300px; object-fit: cover; border-radius: 10px; }
+.post-dialog__preview > div { margin-top: 12px; display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: #fafbfb; }
+.post-dialog__preview span { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 10px; text-transform: capitalize; }
+.post-dialog__preview svg { width: 16px; color: var(--coral-dark); }
+.post-dialog__fields .composer-field:first-child { margin-top: 0; }
+.post-dialog__field-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0 12px; }
+.post-dialog__footer { min-height: 82px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); padding: 14px 24px; }
+.post-dialog__footer > div { display: flex; align-items: center; gap: 9px; }
+.post-dialog__footer > div:first-child > span { color: #8f1d16; font-size: 10px; font-weight: 750; }
+.post-dialog__footer .secondary-button { min-height: 44px; }
+.post-dialog__delete,
+.post-dialog__confirm-delete,
+.post-dialog__cancel-delete { min-height: 38px; display: flex; align-items: center; gap: 7px; border: 0; border-radius: 6px; padding: 0 10px; background: transparent; font-size: 10px; font-weight: 750; }
+.post-dialog__delete { color: #a12820; }
+.post-dialog__delete:hover { background: #fff1f0; }
+.post-dialog__delete svg { width: 16px; }
+.post-dialog__confirm-delete { background: #a12820; color: white; }
+.post-dialog__cancel-delete { color: var(--muted); }
+
 .app-toast { position: fixed; right: 26px; bottom: 26px; z-index: 90; min-height: 52px; display: flex; align-items: center; gap: 10px; border: 1px solid #9ed0aa; border-radius: 8px; padding: 0 18px; background: white; box-shadow: var(--shadow); color: var(--sage-ink); font-size: 12px; font-weight: 700; }
 .app-toast svg { width: 19px; }
 
@@ -1606,6 +1664,12 @@ summary:focus-visible {
   .dashboard-sidebar nav span,
   .dashboard-sidebar__collapse span { display: inline; }
   .dashboard-sidebar nav button .dashboard-sidebar__lock { margin-left: auto; }
+  .dashboard-app--collapsed .dashboard-sidebar nav button { justify-content: flex-start; padding: 0 15px; }
+  .dashboard-app--collapsed .dashboard-sidebar nav span,
+  .dashboard-app--collapsed .dashboard-sidebar__collapse span { display: inline; }
+  .dashboard-app--collapsed .dashboard-sidebar nav button .dashboard-sidebar__lock { margin-left: auto; }
+  .dashboard-app--collapsed .dashboard-sidebar__collapse { justify-content: flex-start; margin-inline: 14px; padding: 0 15px; }
+  .dashboard-app--collapsed .dashboard-sidebar__collapse svg { transform: rotate(180deg); }
   .dashboard-topbar { height: 70px; grid-template-columns: 38px 1fr auto; gap: 10px; padding-inline: 14px; }
   .demo-banner { padding-inline: 14px; }
   .demo-banner > span { font-size: 10px; }
@@ -1631,6 +1695,8 @@ summary:focus-visible {
   .feature-view__split,
   .connector-grid { grid-template-columns: 1fr; }
   .feature-view__locked { grid-template-columns: 1fr; padding: 28px; }
+  .calendar-workspace__toolbar { align-items: stretch; flex-direction: column; padding: 16px; }
+  .calendar-workspace__toolbar .button { width: 100%; }
   .plan-overview__current { grid-template-columns: 1fr; }
   .plan-overview__plans { grid-template-columns: 1fr; }
   .integrations-panel__intro { align-items: flex-start; flex-direction: column; }
@@ -1649,6 +1715,14 @@ summary:focus-visible {
   .composer-plan__summary { grid-template-columns: 100px 1fr; }
   .composer-plan__summary img { width: 100px; height: 130px; }
   .composer-plan__fields { grid-template-columns: 1fr; }
+  .post-dialog { width: 100%; max-height: 100svh; height: 100svh; border-radius: 0; }
+  .post-dialog__body { grid-template-columns: 1fr; }
+  .post-dialog__preview { display: grid; grid-template-columns: 110px 1fr; gap: 12px; }
+  .post-dialog__preview img { height: 130px; }
+  .post-dialog__preview > div { margin-top: 0; }
+  .post-dialog__footer { align-items: stretch; flex-direction: column-reverse; }
+  .post-dialog__footer > div { justify-content: flex-end; }
+  .post-dialog__footer > div:first-child { justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,85 +1,78 @@
 export type Channel = "Instagram" | "TikTok" | "LinkedIn" | "YouTube";
+export type ScheduleStatus = "Entwurf" | "Freigabe" | "Geplant";
 
 export type ScheduleItem = {
   id: string;
-  day: number;
-  weekday: string;
+  date: string;
   time: string;
   title: string;
+  caption: string;
   channel: Channel;
-  status: "Entwurf" | "Freigabe" | "Geplant";
+  status: ScheduleStatus;
   image: string;
 };
+
+export const calendarAnchorDate = "2026-08-24";
 
 export const scheduleItems: ScheduleItem[] = [
   {
     id: "carousel-alpine",
-    day: 24,
-    weekday: "Mo",
+    date: "2026-08-24",
     time: "09:00",
     title: "Carousel Post",
+    caption: "Drei Perspektiven, ein klarer Gedanke: Gute Markeninhalte beginnen mit einer Geschichte, die Menschen wirklich mitnimmt.",
     channel: "Instagram",
     status: "Entwurf",
     image: "/media/alpine-lake.webp",
   },
   {
     id: "behind-scenes",
-    day: 25,
-    weekday: "Di",
+    date: "2026-08-25",
     time: "15:30",
     title: "Behind-the-Scenes Reel",
+    caption: "Ein Blick hinter die Kulissen von Nordlicht Studio – von der ersten Skizze bis zum finalen Schnitt.",
     channel: "TikTok",
     status: "Geplant",
     image: "/media/creator-studio.webp",
   },
   {
     id: "tiktok-reel",
-    day: 26,
-    weekday: "Mi",
+    date: "2026-08-26",
     time: "10:30",
     title: "TikTok-Reel",
+    caption: "So wird aus einer ruhigen Idee ein kurzer Clip mit einem starken Einstieg und einer klaren Botschaft.",
     channel: "TikTok",
     status: "Freigabe",
     image: "/media/team-studio.webp",
   },
   {
     id: "story-series",
-    day: 27,
-    weekday: "Do",
+    date: "2026-08-27",
     time: "17:00",
     title: "Story-Serie",
+    caption: "Heute nehmen wir euch in drei kurzen Stories mit durch unseren kreativen Prozess.",
     channel: "Instagram",
     status: "Geplant",
     image: "/media/alpine-lake.webp",
   },
   {
     id: "team-update",
-    day: 28,
-    weekday: "Fr",
+    date: "2026-08-28",
     time: "12:00",
     title: "Team-Update Post",
+    caption: "Diese Woche haben wir neue Workflows getestet, Feedback ausgewertet und unseren Content-Prozess weiter vereinfacht.",
     channel: "LinkedIn",
     status: "Geplant",
     image: "/media/team-studio.webp",
   },
   {
     id: "tips-reel",
-    day: 29,
-    weekday: "Sa",
+    date: "2026-08-29",
     time: "19:30",
     title: "Tipps & Tricks Reel",
+    caption: "Drei einfache Handgriffe, mit denen deine nächsten Kurzvideos klarer, schneller und wirkungsvoller werden.",
     channel: "TikTok",
     status: "Geplant",
     image: "/media/design-studio.webp",
   },
-];
-
-export const weekdays = [
-  { short: "Mo", day: 24 },
-  { short: "Di", day: 25 },
-  { short: "Mi", day: 26 },
-  { short: "Do", day: 27 },
-  { short: "Fr", day: 28 },
-  { short: "Sa", day: 29 },
-  { short: "So", day: 30 },
 ];
