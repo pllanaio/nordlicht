@@ -8,6 +8,7 @@ export const metadata: Metadata = { title: "Workspace" };
 const dashboardViewByQuery: Record<string, DashboardView> = {
   kalender: "Kalender",
   freigaben: "Freigaben",
+  organisation: "Organisation",
   mediathek: "Mediathek",
   "ki-studio": "KI-Studio",
   trends: "Trends",

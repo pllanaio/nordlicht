@@ -36,10 +36,10 @@ export const scheduleItems: ScheduleItem[] = [
     image: "/media/creator-studio.webp",
   },
   {
-    id: "tiktok-reel",
+    id: "tiktok-video",
     date: "2026-08-26",
     time: "10:30",
-    title: "TikTok-Reel",
+    title: "TikTok-Video",
     caption: "So wird aus einer ruhigen Idee ein kurzer Clip mit einem starken Einstieg und einer klaren Botschaft.",
     channel: "TikTok",
     status: "Freigabe",

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Bell,
+  Building2,
   CalendarDays,
   CheckCircle2,
   ChevronLeft,
@@ -39,6 +40,8 @@ import { BrandMark } from "@/components/brand-mark";
 import { ContentComposer } from "@/components/dashboard/content-composer";
 import { AiStudio } from "@/components/dashboard/ai-studio";
 import { initialMediaAssets, MediaLibrary, type MediaAsset } from "@/components/dashboard/media-library";
+import { initialOrganization, OrganizationManager, type Organization } from "@/components/dashboard/organization-manager";
+import { ProfileDialog, type UserProfile } from "@/components/dashboard/profile-dialog";
 import { ScheduleItemDialog } from "@/components/dashboard/schedule-item-dialog";
 import { TrendRadar } from "@/components/trend-radar";
 import { logout } from "@/app/actions/auth";
@@ -46,7 +49,7 @@ import { calendarAnchorDate, scheduleItems as initialScheduleItems, type Channel
 import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/contracts";
 import { minimumPlanFor, planCatalog, planIds, planIncludes, type PlanFeature, type PlanId } from "@/lib/plans";
 
-export type DashboardView = "Übersicht" | "Kalender" | "Freigaben" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
+export type DashboardView = "Übersicht" | "Kalender" | "Freigaben" | "Organisation" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
 
 type ConnectorFeedback = { provider?: string; status: string };
 
@@ -54,12 +57,15 @@ const navItems: Array<{ name: DashboardView; icon: typeof Home; feature?: PlanFe
   { name: "Übersicht", icon: Home },
   { name: "Kalender", icon: CalendarDays },
   { name: "Freigaben", icon: UsersRound, feature: "team_approvals" },
+  { name: "Organisation", icon: Building2, feature: "team_approvals" },
   { name: "Mediathek", icon: ImageIcon },
   { name: "KI-Studio", icon: WandSparkles },
   { name: "Trends", icon: TrendingUp },
   { name: "Integrationen", icon: Plug },
   { name: "Abrechnung", icon: CircleDollarSign },
 ];
+
+const managerViews = new Set<DashboardView>(["Übersicht", "Kalender", "Freigaben", "Mediathek", "KI-Studio", "Trends"]);
 
 const channelClass: Record<Channel, string> = {
   Instagram: "instagram",
@@ -121,6 +127,30 @@ function formatWeekRange(weekStart: string) {
   return `${startLabel} – ${endLabel}`;
 }
 
+function getIsoWeek(date: string) {
+  const value = parseCalendarDate(date);
+  const target = new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
+  const weekday = target.getUTCDay() || 7;
+  target.setUTCDate(target.getUTCDate() + 4 - weekday);
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil((((target.getTime() - yearStart.getTime()) / 86_400_000) + 1) / 7);
+}
+
+function contentTypeLabel(channel: Channel) {
+  if (channel === "TikTok") return "TikTok-Video";
+  if (channel === "Instagram") return "Instagram-Reel";
+  if (channel === "LinkedIn") return "LinkedIn-Beitrag";
+  return "YouTube-Video";
+}
+
+type LiveNotice = {
+  id: string;
+  title: string;
+  detail: string;
+  kind: "approval" | "draft" | "connector";
+  itemId?: string;
+};
+
 function scheduleSlotTop(time: string) {
   const [hours, minutes] = time.split(":").map(Number);
   const minuteOfDay = (hours * 60) + minutes;
@@ -152,6 +182,7 @@ function WeekPlanner({
   onOpenItem,
   onPreviousWeek,
   onNextWeek,
+  onSelectDay,
 }: {
   items: ScheduleItem[];
   weekStart: string;
@@ -159,12 +190,13 @@ function WeekPlanner({
   onOpenItem: (id: string) => void;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
+  onSelectDay: (date: string) => void;
 }) {
   const days = getWeekDays(weekStart);
   return (
     <section className="week-planner">
       <div className="week-planner__head">
-        <h2>Wochenansicht</h2>
+        <h2>Wochenansicht <span>KW {getIsoWeek(weekStart)}</span></h2>
         <div className="week-planner__controls">
           <button type="button" onClick={onPreviousWeek} aria-label="Vorherige Woche"><ChevronLeft aria-hidden="true" /></button>
           <span>{formatWeekRange(weekStart)}</span>
@@ -174,14 +206,14 @@ function WeekPlanner({
       <div className="week-planner__days">
         <div className="week-planner__time-space" />
         {days.map((day) => (
-          <div className={day.date === focusDate ? "is-selected" : ""} key={day.date}><span>{day.short}</span><strong>{day.day}</strong></div>
+          <button className={day.date === focusDate ? "is-selected" : ""} type="button" onClick={() => onSelectDay(day.date)} aria-label={`${day.short}, ${day.day}. auswählen`} key={day.date}><span>{day.short}</span><strong>{day.day}</strong></button>
         ))}
       </div>
       <div className="week-planner__body">
         <div className="week-planner__times"><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span></div>
         <div className="week-planner__columns">
           {days.map((day) => (
-            <div className={`week-column${day.date === focusDate ? " is-selected" : ""}`} key={day.date}>
+            <div className={`week-column${day.date === focusDate ? " is-selected" : ""}`} onClick={() => onSelectDay(day.date)} key={day.date}>
               {items.filter((item) => item.date === day.date).map((item) => (
                 <div className="schedule-slot" style={{ top: scheduleSlotTop(item.time) }} key={item.id}><ScheduleCard item={item} onOpen={onOpenItem} /></div>
               ))}
@@ -199,26 +231,45 @@ function Overview({
   onCreate,
   demo,
   displayName,
-  trendAccess,
   weekStart,
   focusDate,
   onOpenItem,
   onPreviousWeek,
   onNextWeek,
+  onSelectDay,
   onOpenTrends,
+  onOpenIntegrations,
+  connectors,
+  notices,
+  unfinishedItems,
+  activeDraftIndex,
+  onCycleDraft,
 }: {
   items: ScheduleItem[];
   onCreate: () => void;
   demo: boolean;
   displayName: string;
-  trendAccess: boolean;
   weekStart: string;
   focusDate: string;
   onOpenItem: (id: string) => void;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
+  onSelectDay: (date: string) => void;
   onOpenTrends: () => void;
+  onOpenIntegrations: () => void;
+  connectors: SocialConnectorCard[];
+  notices: LiveNotice[];
+  unfinishedItems: ScheduleItem[];
+  activeDraftIndex: number;
+  onCycleDraft: (direction: -1 | 1) => void;
 }) {
+  const nextItem = unfinishedItems[activeDraftIndex];
+  const channels: Array<{ channel: Channel; provider?: SocialProviderId }> = [
+    { channel: "Instagram", provider: "instagram" },
+    { channel: "TikTok", provider: "tiktok" },
+    { channel: "LinkedIn", provider: "linkedin" },
+  ];
+
   return (
     <>
       <header className="dashboard-heading">
@@ -227,57 +278,55 @@ function Overview({
       </header>
       <div className="dashboard-grid">
         <div className="dashboard-grid__main">
-          <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} />
+          <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} onSelectDay={onSelectDay} />
           <div className="dashboard-lower">
             <section className="channel-table">
               <h2>Kanäle</h2>
               <div className="channel-table__labels"><span>Kanal</span><span>Status</span><span>Nächste Veröffentlichung</span></div>
-              {[
-                ["Instagram", "@nordlicht.studio", "Mi, 26. Aug., 17:00"],
-                ["TikTok", "@nordlicht.studio", "Mi, 26. Aug., 10:30"],
-                ["LinkedIn", "Nordlicht Studio", "Fr, 28. Aug., 12:00"],
-              ].map(([channel, handle, next]) => (
-                <div className="channel-row" key={channel}>
-                  <span className={`channel-icon channel-icon--${channel.toLowerCase()}`}><ChannelIcon channel={channel as Channel} /></span>
-                  <span><strong>{channel}</strong><small>{handle}</small></span>
-                  <span className="channel-row__status"><i /> Verbunden</span><span>{next}</span><ChevronRight size={16} aria-hidden="true" />
-                </div>
-              ))}
+              {channels.map(({ channel, provider }) => {
+                const connector = connectors.find((candidate) => candidate.provider === provider);
+                const connected = Boolean(connector?.connection);
+                const next = items.filter((item) => item.channel === channel && item.status === "Geplant").toSorted((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`))[0];
+                return (
+                  <button className="channel-row" type="button" onClick={onOpenIntegrations} key={channel}>
+                    <span className={`channel-icon channel-icon--${channel.toLowerCase()}`}><ChannelIcon channel={channel} /></span>
+                    <span><strong>{channel}</strong><small>{connector?.connection?.displayName ?? "Noch nicht verbunden"}</small></span>
+                    <span className={`channel-row__status${connected ? "" : " is-missing"}`}><i /> {connected ? "Verbunden" : connector?.configured ? "Bereit" : "Nicht eingerichtet"}</span><span>{next ? formatCalendarMoment(next.date, next.time) : "Nichts geplant"}</span><ChevronRight size={16} aria-hidden="true" />
+                  </button>
+                );
+              })}
             </section>
             <section className="reminders">
-              <h2>Erinnerungen</h2>
-              <button><span><CalendarDays aria-hidden="true" /></span><span><strong>Freigabe ausstehend</strong><small>1 Inhalt wartet auf deine Freigabe.</small></span><ChevronRight aria-hidden="true" /></button>
-              <button><span><Bell aria-hidden="true" /></span><span><strong>Verbindung prüfen</strong><small>1 Integration benötigt Aufmerksamkeit.</small></span><ChevronRight aria-hidden="true" /></button>
+              <div className="panel-title"><h2>Erinnerungen</h2><span>{notices.length}</span></div>
+              {notices.length ? notices.slice(0, 4).map((notice) => (
+                <button type="button" onClick={() => notice.itemId ? onOpenItem(notice.itemId) : onOpenIntegrations()} key={notice.id}><span>{notice.kind === "connector" ? <Bell aria-hidden="true" /> : <CalendarDays aria-hidden="true" />}</span><span><strong>{notice.title}</strong><small>{notice.detail}</small></span><ChevronRight aria-hidden="true" /></button>
+              )) : <div className="reminders__empty"><CheckCircle2 aria-hidden="true" /><strong>Alles erledigt</strong><small>Aktuell gibt es keine offenen Aufgaben.</small></div>}
             </section>
           </div>
         </div>
         <aside className="dashboard-grid__aside">
           <section className="next-step">
-            <div className="panel-title"><h2>Nächster Schritt</h2><span>•••</span></div>
-            <h3>TikTok-Reel finalisieren</h3>
-            <p>Bring dein Reel auf den letzten Stand.</p>
-            <div className="progress-steps"><span className="is-done">1<small>Bearbeiten</small></span><span className="is-active">2<small>Review</small></span><span>3<small>Planen</small></span></div>
-            <div className="next-step__media">
-              <Image src="/media/creator-studio.webp" alt="Vorschau des TikTok-Reels" width={92} height={128} sizes="92px" />
-              <div><strong>Caption (Auszug)</strong><p>Ein Blick hinter die Kulissen von Nordlicht Studio. So entsteht Content, der verbindet.</p></div>
-            </div>
-            <button className="button" onClick={onCreate}>Weiter bearbeiten <ArrowRight size={17} aria-hidden="true" /></button>
-          </section>
-          {trendAccess ? (
-            <section className="trend-radar">
-              <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
-              <div className="trend-radar__signal">
-                <TrendingUp aria-hidden="true" />
-                <div><strong>Behind-the-scenes Formate gewinnen an Tempo</strong><p>Mehr Marken setzen auf authentische Einblicke. Engagement steigt.</p></div>
-                <button type="button" onClick={onOpenTrends}>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
+            <div className="panel-title"><h2>Nächster Schritt</h2>{unfinishedItems.length ? <div className="next-step__navigation"><button type="button" onClick={() => onCycleDraft(-1)} aria-label="Vorheriger Entwurf"><ChevronLeft /></button><span>{activeDraftIndex + 1}/{unfinishedItems.length}</span><button type="button" onClick={() => onCycleDraft(1)} aria-label="Nächster Entwurf"><ChevronRight /></button></div> : null}</div>
+            {nextItem ? <>
+              <span className="next-step__type">{contentTypeLabel(nextItem.channel)}</span>
+              <h3>{contentTypeLabel(nextItem.channel)} finalisieren</h3>
+              <p>{nextItem.status === "Freigabe" ? "Prüfe den Beitrag und plane ihn final ein." : "Vervollständige den Entwurf und übergib ihn ins Review."}</p>
+              <div className="progress-steps"><span className={nextItem.status !== "Entwurf" ? "is-done" : "is-active"}>1<small>Bearbeiten</small></span><span className={nextItem.status === "Freigabe" ? "is-active" : ""}>2<small>Review</small></span><span>3<small>Planen</small></span></div>
+              <div className="next-step__media">
+                <Image src={nextItem.image} alt={`Vorschau für ${nextItem.title}`} width={92} height={128} sizes="92px" />
+                <div><strong>{nextItem.title}</strong><p>{nextItem.caption || "Noch keine Caption hinterlegt."}</p><small>{formatCalendarMoment(nextItem.date, nextItem.time)}</small></div>
               </div>
-            </section>
-          ) : (
-            <section className="trend-radar trend-radar--locked">
-              <LockKeyhole aria-hidden="true" />
-              <div><span className="feature-kicker">Pro-Feature</span><h2>Trendradar</h2><p>Trend- und Algorithmus-Signale sind im Pro-Tarif verfügbar.</p></div>
-            </section>
-          )}
+              <button className="button" type="button" onClick={() => onOpenItem(nextItem.id)}>Bearbeiten & fertigstellen <ArrowRight size={17} aria-hidden="true" /></button>
+            </> : <div className="next-step__empty"><CheckCircle2 aria-hidden="true" /><h3>Alles fertiggestellt</h3><p>Es gibt aktuell keine Entwürfe oder offenen Freigaben.</p><button className="button" onClick={onCreate}>Neuen Content erstellen <Plus size={16} /></button></div>}
+          </section>
+          <section className="trend-radar">
+            <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
+            <div className="trend-radar__signal">
+              <TrendingUp aria-hidden="true" />
+              <div><strong>Behind-the-scenes Formate gewinnen an Tempo</strong><p>Mehr Marken setzen auf authentische Einblicke. Engagement steigt.</p></div>
+              <button type="button" onClick={onOpenTrends}>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
+            </div>
+          </section>
         </aside>
       </div>
     </>
@@ -422,12 +471,20 @@ function FeatureView({
   onOpenItem,
   onPreviousWeek,
   onNextWeek,
+  onSelectDay,
   mediaAssets,
   onMediaUpload,
   demo,
   connectors,
   plan,
   internalTest,
+  organization,
+  onOrganizationChange,
+  onOrganizationDelete,
+  onToast,
+  onOpenOrganization,
+  profile,
+  currentRole,
 }: {
   view: Exclude<DashboardView, "Übersicht">;
   onCreate: () => void;
@@ -437,16 +494,25 @@ function FeatureView({
   onOpenItem: (id: string) => void;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
+  onSelectDay: (date: string) => void;
   mediaAssets: MediaAsset[];
   onMediaUpload: (files: File[]) => void;
   demo: boolean;
   connectors: SocialConnectorCard[];
   plan: PlanId;
   internalTest: boolean;
+  organization: Organization | null;
+  onOrganizationChange: (organization: Organization) => void;
+  onOrganizationDelete: () => void;
+  onToast: (message: string) => void;
+  onOpenOrganization: () => void;
+  profile: UserProfile;
+  currentRole: "Administrator" | "Manager";
 }) {
   const featureCopy: Record<Exclude<DashboardView, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
     Freigaben: { title: "Teamfreigaben", text: "Prüfe Inhalte gemeinsam, sammle Feedback und dokumentiere Entscheidungen.", icon: UsersRound },
+    Organisation: { title: "Organisation & Benutzer", text: "Verwalte deinen Workspace, Mitglieder, Rollen und Einladungsversand.", icon: Building2 },
     Mediathek: { title: "Mediathek", text: "Rohmaterial, Entwürfe und veröffentlichte Assets an einem Ort.", icon: FileImage },
     "KI-Studio": { title: "KI-Studio", text: "Caption, Hashtags, Hooks und Content-Recycling in einem fokussierten Arbeitsbereich.", icon: Sparkles },
     Trends: { title: "Trendradar & Zielgruppenqualität", text: "Öffentliche Hashtag-Signale und individuelle Branchenideen mit nachvollziehbarer Quelle.", icon: TrendingUp },
@@ -455,7 +521,7 @@ function FeatureView({
   };
   const feature = featureCopy[view];
   const Icon = feature.icon;
-  const restrictedFeature = view === "Freigaben" ? "team_approvals" : null;
+  const restrictedFeature = view === "Freigaben" || view === "Organisation" ? "team_approvals" : null;
   const restricted = !demo && Boolean(restrictedFeature && !planIncludes(plan, restrictedFeature));
 
   return (
@@ -469,7 +535,7 @@ function FeatureView({
             <div><strong>{items.length} Beiträge</strong><span>Klicke einen Post an, um Details zu sehen, ihn zu bearbeiten, zu verschieben oder zu löschen.</span></div>
             <button className="button" type="button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
           </div>
-          <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} />
+          <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} onSelectDay={onSelectDay} />
         </div>
       ) : view === "Mediathek" ? (
         <MediaLibrary assets={mediaAssets} onUpload={onMediaUpload} />
@@ -477,10 +543,14 @@ function FeatureView({
         <AiStudio mode={demo ? "demo" : "workspace"} />
       ) : view === "Trends" ? (
         <TrendRadar mode={demo ? "demo" : "workspace"} proAccess={planIncludes(plan, "trend_radar")} />
+      ) : view === "Organisation" ? (
+        <OrganizationManager organization={organization} demo={demo} currentUser={profile} onChange={onOrganizationChange} onDelete={onOrganizationDelete} onToast={onToast} />
       ) : view === "Freigaben" ? (
-        <div className="feature-view__split">
-          <section><span className="feature-kicker">Freigabe offen</span><h2>TikTok-Reel final prüfen</h2><p>Caption, Format und Veröffentlichungszeit warten auf die Entscheidung des Teams.</p><button className="button">Review öffnen</button></section>
-          <section><span className="feature-kicker">Teamaktivität</span><h2>3 Entscheidungen diese Woche</h2><p>Alle Kommentare, Änderungen und Freigaben bleiben nachvollziehbar im Content-Verlauf dokumentiert.</p><button className="secondary-button"><UsersRound size={17} aria-hidden="true" /> Verlauf ansehen</button></section>
+        <div className="approval-workspace">
+          <section className="approval-workspace__organization"><div><span className="feature-kicker">Organisation</span><h2>{organization?.name ?? "Noch keine Organisation"}</h2><p>{organization ? `${organization.members.length} Mitglieder können entsprechend ihrer Rolle zusammenarbeiten.` : "Lege zuerst eine Organisation für Teamfreigaben an."}</p></div>{currentRole === "Administrator" ? <button className="secondary-button" type="button" onClick={onOpenOrganization}><Building2 aria-hidden="true" /> Organisation verwalten</button> : <span className="approval-workspace__role"><ShieldCheck aria-hidden="true" /> Manager</span>}</section>
+          <div className="approval-workspace__list">
+            {items.filter((item) => item.status === "Freigabe").length ? items.filter((item) => item.status === "Freigabe").map((item) => <button type="button" onClick={() => onOpenItem(item.id)} key={item.id}><Image src={item.image} alt="" width={74} height={74} /><span><small>{contentTypeLabel(item.channel)} · {formatCalendarMoment(item.date, item.time)}</small><strong>{item.title}</strong><em>Wartet auf Teamfreigabe</em></span><ArrowRight aria-hidden="true" /></button>) : <div className="approval-workspace__empty"><CheckCircle2 aria-hidden="true" /><h2>Keine offenen Freigaben</h2><p>Sobald ein Beitrag den Status „Freigabe“ erhält, erscheint er hier automatisch.</p></div>}
+          </div>
         </div>
       ) : view === "Integrationen" ? (
         <IntegrationsView connectors={connectors} demo={demo} />
@@ -535,14 +605,25 @@ export function DashboardApp({
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [items, setItems] = useState(initialScheduleItems);
   const [mediaAssets, setMediaAssets] = useState(initialMediaAssets);
+  const [organization, setOrganization] = useState<Organization | null>(initialOrganization);
+  const [profile, setProfile] = useState<UserProfile>(() => {
+    const names = displayName.trim().split(/\s+/);
+    return { firstName: isNaN(Number(names[0])) ? (names[0] || "Lea") : "Lea", lastName: names.slice(1).join(" ") || "Nordlicht", email: mode === "demo" ? "lea@nordlicht.studio" : "konto@contentdock.app", avatarUrl: "" };
+  });
   const uploadedMediaUrls = useRef<string[]>([]);
+  const profileMediaUrls = useRef<string[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [calendarWeekStart, setCalendarWeekStart] = useState(calendarAnchorDate);
   const [calendarFocusDate, setCalendarFocusDate] = useState(addCalendarDays(calendarAnchorDate, 2));
+  const [activeDraftIndex, setActiveDraftIndex] = useState(0);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(() => new Set());
+  const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState(() => connectorFeedbackMessage(connectorFeedback));
   const isDemo = mode === "demo";
   const activePlan = planCatalog[plan];
-  const profileInitial = isDemo ? "D" : (displayName.trim().slice(0, 1).toLocaleUpperCase("de") || "T");
+  const profileName = `${profile.firstName} ${profile.lastName}`.trim();
+  const profileInitial = profile.firstName.trim().slice(0, 1).toLocaleUpperCase("de") || "U";
 
   useEffect(() => {
     if (!toast) return;
@@ -552,6 +633,7 @@ export function DashboardApp({
 
   useEffect(() => () => {
     uploadedMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    profileMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -560,6 +642,21 @@ export function DashboardApp({
     return items.filter((item) => `${item.title} ${item.channel} ${item.status}`.toLocaleLowerCase("de").includes(normalized));
   }, [items, query]);
   const selectedItem = selectedItemId ? items.find((item) => item.id === selectedItemId) : undefined;
+  const currentRole = organization?.members.find((member) => member.email.toLocaleLowerCase() === profile.email.toLocaleLowerCase())?.role ?? "Administrator";
+  const visibleView = currentRole === "Manager" && !managerViews.has(activeView) ? "Übersicht" : activeView;
+  const visibleNavItems = currentRole === "Manager" ? navItems.filter((item) => managerViews.has(item.name)) : navItems;
+  const unfinishedItems = useMemo(() => items.filter((item) => item.status !== "Geplant").toSorted((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`)), [items]);
+  const safeDraftIndex = unfinishedItems.length ? activeDraftIndex % unfinishedItems.length : 0;
+  const notices = useMemo<LiveNotice[]>(() => {
+    const contentNotices = items.flatMap((item): LiveNotice[] => {
+      if (item.status === "Freigabe") return [{ id: `approval-${item.id}`, title: `${contentTypeLabel(item.channel)} freigeben`, detail: `${item.title} wartet auf eine Entscheidung.`, kind: "approval", itemId: item.id }];
+      if (item.status === "Entwurf") return [{ id: `draft-${item.id}`, title: `${contentTypeLabel(item.channel)} fertigstellen`, detail: `${item.title} ist noch ein Entwurf.`, kind: "draft", itemId: item.id }];
+      return [];
+    });
+    const connectorNotices = currentRole === "Administrator" ? connectors.filter((connector) => !connector.connection).map((connector): LiveNotice => ({ id: `connector-${connector.provider}`, title: `${connector.label} verbinden`, detail: connector.configured ? "Der offizielle Login ist bereit." : "Provider-Konfiguration ist noch unvollständig.", kind: "connector" })) : [];
+    return [...contentNotices, ...connectorNotices];
+  }, [connectors, currentRole, items]);
+  const unreadNotices = notices.filter((notice) => !seenNotificationIds.has(notice.id));
 
   function addContent(content: { title: string; channel: Channel; caption: string; date: string; time: string }) {
     const nextItem: ScheduleItem = {
@@ -608,6 +705,52 @@ export function DashboardApp({
     setCalendarFocusDate((current) => addCalendarDays(current, amount * 7));
   }
 
+  function selectCalendarDay(date: string) {
+    setCalendarFocusDate(date);
+    setCalendarWeekStart(getWeekStart(date));
+  }
+
+  function cycleDraft(direction: -1 | 1) {
+    if (!unfinishedItems.length) return;
+    setActiveDraftIndex((current) => (current + direction + unfinishedItems.length) % unfinishedItems.length);
+  }
+
+  function toggleNotifications() {
+    if (notificationsOpen) setSeenNotificationIds((current) => new Set([...current, ...notices.map((notice) => notice.id)]));
+    setNotificationsOpen((current) => !current);
+  }
+
+  function openNotice(notice: LiveNotice) {
+    setSeenNotificationIds((current) => new Set([...current, notice.id]));
+    setNotificationsOpen(false);
+    if (notice.itemId) openItem(notice.itemId);
+    else setActiveView("Integrationen");
+  }
+
+  function deleteOrganization() {
+    uploadedMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
+    uploadedMediaUrls.current = [];
+    setOrganization(null);
+    setItems([]);
+    setMediaAssets([]);
+    setSelectedItemId(null);
+    setActiveDraftIndex(0);
+    setToast("Organisation, Mitglieder und lokale Demo-Inhalte wurden entfernt.");
+  }
+
+  function saveProfile(nextProfile: UserProfile, avatarFile?: File) {
+    let avatarUrl = nextProfile.avatarUrl;
+    if (avatarFile) {
+      if (profile.avatarUrl.startsWith("blob:")) URL.revokeObjectURL(profile.avatarUrl);
+      avatarUrl = URL.createObjectURL(avatarFile);
+      profileMediaUrls.current.push(avatarUrl);
+    }
+    setOrganization((current) => current ? { ...current, members: current.members.map((member) => member.email.toLocaleLowerCase() === profile.email.toLocaleLowerCase() ? { ...member, firstName: nextProfile.firstName, lastName: nextProfile.lastName, email: nextProfile.email } : member) } : current);
+    setProfile({ ...nextProfile, avatarUrl });
+    setProfileOpen(false);
+    setToast("Dein Profil wurde aktualisiert.");
+  }
+
   function uploadMedia(files: File[]) {
     const supported = files.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
     if (!supported.length) {
@@ -637,10 +780,10 @@ export function DashboardApp({
       <aside className={`dashboard-sidebar${sidebarOpen ? " is-open" : ""}`}>
         <div className="dashboard-sidebar__brand"><Link href="/"><BrandMark compact /></Link><button onClick={() => setSidebarOpen(false)} aria-label="Menü schließen"><X /></button></div>
         <nav aria-label="Workspace-Navigation">
-          {navItems.map(({ name, icon: Icon, feature }) => {
+          {visibleNavItems.map(({ name, icon: Icon, feature }) => {
             const locked = !isDemo && Boolean(feature && !planIncludes(plan, feature));
             return (
-              <button className={`${activeView === name ? "is-active" : ""}${locked ? " is-locked" : ""}`} onClick={() => { setActiveView(name); setSidebarOpen(false); }} key={name}>
+              <button className={`${visibleView === name ? "is-active" : ""}${locked ? " is-locked" : ""}`} onClick={() => { setActiveView(name); setSidebarOpen(false); }} key={name}>
                 <Icon aria-hidden="true" /><span>{name}</span>{locked ? <LockKeyhole className="dashboard-sidebar__lock" aria-label="In diesem Tarif gesperrt" /> : null}
               </button>
             );
@@ -658,34 +801,43 @@ export function DashboardApp({
         ) : null}
         <header className="dashboard-topbar">
           <button className="dashboard-topbar__menu" onClick={() => { setSidebarCollapsed(false); setSidebarOpen(true); }} aria-label="Menü öffnen"><Menu /></button>
-          <button className="workspace-switcher"><LayoutGrid aria-hidden="true" /><span>Nordlicht Studio</span>{!isDemo ? <em>{activePlan.label}{internalTest ? " · Test" : ""}</em> : null}<ChevronRight aria-hidden="true" /></button>
+          <button className="workspace-switcher" type="button" onClick={() => { if (currentRole === "Administrator") setActiveView("Organisation"); }} aria-label={currentRole === "Administrator" ? "Organisation verwalten" : "Aktive Organisation"}><LayoutGrid aria-hidden="true" /><span>{organization?.name ?? "Organisation anlegen"}</span><em>{currentRole}</em><ChevronRight aria-hidden="true" /></button>
           <label className="dashboard-search"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Suchen (z. B. Inhalte, Kanäle, Vorlagen)" aria-label="Workspace durchsuchen" />{query ? <button onClick={() => setQuery("")} aria-label="Suche löschen"><X /></button> : null}</label>
           <div className="dashboard-profile">
-            <button aria-label="Benachrichtigungen"><Bell aria-hidden="true" /><i /></button>
-            <span>{profileInitial}</span>
-            <div><strong>{isDemo ? "Demo" : displayName}</strong>{!isDemo ? <small>{activePlan.label}{internalTest ? " · Testkonto" : ""}</small> : null}</div>
+            <button type="button" onClick={toggleNotifications} aria-expanded={notificationsOpen} aria-label="Benachrichtigungen"><Bell aria-hidden="true" />{unreadNotices.length ? <i /> : null}</button>
+            <button className="dashboard-profile__identity" type="button" onClick={() => setProfileOpen(true)} aria-label="Eigenes Profil bearbeiten">
+              <span>{profile.avatarUrl ? <Image src={profile.avatarUrl} alt="" fill unoptimized={profile.avatarUrl.startsWith("blob:")} sizes="36px" /> : profileInitial}</span>
+              <div><strong>{profileName}</strong><small>{isDemo ? "Demo-Profil" : `${activePlan.label}${internalTest ? " · Testkonto" : ""}`}</small></div>
+            </button>
             {!isDemo ? <form action={logout}><button type="submit" aria-label="Abmelden" title="Abmelden"><LogOut aria-hidden="true" /></button></form> : null}
           </div>
+          {notificationsOpen ? <section className="notification-menu" aria-label="Benachrichtigungsmenü"><header><div><strong>Mitteilungen</strong><span>{unreadNotices.length ? `${unreadNotices.length} offen` : "Aktuell"}</span></div><button type="button" onClick={toggleNotifications} aria-label="Mitteilungen schließen"><X /></button></header>{unreadNotices.length ? <div>{unreadNotices.map((notice) => <button type="button" onClick={() => openNotice(notice)} key={notice.id}><span className={`notification-menu__icon notification-menu__icon--${notice.kind}`}>{notice.kind === "connector" ? <Plug /> : <CalendarDays />}</span><span><strong>{notice.title}</strong><small>{notice.detail}</small></span><ChevronRight /></button>)}</div> : <div className="notification-menu__empty"><CheckCircle2 aria-hidden="true" /><strong>Alles erledigt</strong><span>Es gibt keine neuen Mitteilungen.</span></div>}</section> : null}
         </header>
         <div className="dashboard-content">
           {query && filteredItems.length !== items.length ? <div className="search-result-note">{filteredItems.length} Inhalte passen zu „{query}“.</div> : null}
-          {activeView === "Übersicht" ? (
+          {visibleView === "Übersicht" ? (
             <Overview
               items={filteredItems}
               onCreate={openCreate}
               demo={isDemo}
-              displayName={displayName}
-              trendAccess
+              displayName={profile.firstName}
               weekStart={calendarWeekStart}
               focusDate={calendarFocusDate}
               onOpenItem={openItem}
               onPreviousWeek={() => changeWeek(-1)}
               onNextWeek={() => changeWeek(1)}
+              onSelectDay={selectCalendarDay}
               onOpenTrends={() => setActiveView("Trends")}
+              onOpenIntegrations={() => { if (currentRole === "Administrator") setActiveView("Integrationen"); }}
+              connectors={connectors}
+              notices={notices}
+              unfinishedItems={unfinishedItems}
+              activeDraftIndex={safeDraftIndex}
+              onCycleDraft={cycleDraft}
             />
           ) : (
             <FeatureView
-              view={activeView}
+              view={visibleView}
               onCreate={openCreate}
               items={filteredItems}
               weekStart={calendarWeekStart}
@@ -693,18 +845,27 @@ export function DashboardApp({
               onOpenItem={openItem}
               onPreviousWeek={() => changeWeek(-1)}
               onNextWeek={() => changeWeek(1)}
+              onSelectDay={selectCalendarDay}
               mediaAssets={mediaAssets}
               onMediaUpload={uploadMedia}
               demo={isDemo}
               connectors={connectors}
               plan={plan}
               internalTest={internalTest}
+              organization={organization}
+              onOrganizationChange={setOrganization}
+              onOrganizationDelete={deleteOrganization}
+              onToast={setToast}
+              onOpenOrganization={() => setActiveView("Organisation")}
+              profile={profile}
+              currentRole={currentRole}
             />
           )}
         </div>
       </section>
       {composerOpen ? <ContentComposer mode={mode} onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
       {selectedItem ? <ScheduleItemDialog key={selectedItem.id} item={selectedItem} onClose={() => setSelectedItemId(null)} onSave={saveItem} onDelete={deleteItem} /> : null}
+      {profileOpen ? <ProfileDialog profile={profile} onClose={() => setProfileOpen(false)} onSave={saveProfile} /> : null}
       {toast ? <div className="app-toast"><CheckCircle2 aria-hidden="true" /> {toast}</div> : null}
     </main>
   );

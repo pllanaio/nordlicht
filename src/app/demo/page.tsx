@@ -7,6 +7,7 @@ export const metadata: Metadata = { title: "Live-Demo" };
 const demoViewByQuery: Record<string, DashboardView> = {
   kalender: "Kalender",
   freigaben: "Freigaben",
+  organisation: "Organisation",
   mediathek: "Mediathek",
   "ki-studio": "KI-Studio",
   trends: "Trends",

@@ -35,10 +35,14 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 ## Produktumfang
 
 - Kanalübergreifender Wochenkalender mit Status, Erinnerungen und Freigaben
+- Dynamische Erinnerungen und Entwurfsqueue, die unmittelbar auf Kalender-, Status- und Connector-Änderungen reagieren
+- Auswählbare Kalendertage, ISO-Kalenderwochen sowie direkt bearbeitbare Entwürfe und Freigaben
 - Lokaler Medien-Upload mit Bild-/Video-Vorschau
 - KI-Studio für Captions, Hashtags, Hooks und Content-Recycling; als lokale Tech-Demo oder im Workspace per persönlichem API-Key
 - Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
 - OAuth-Connectoren für Instagram, LinkedIn und TikTok mit offiziellem Provider-Login
+- Organisationsverwaltung mit Administrator-/Manager-RBAC, Mitgliederverwaltung und geschütztem SMTP-Einladungsversand
+- Bearbeitbares Benutzerprofil und datenbasiertes Benachrichtigungsmenü
 - Progressive OAuth-Scopes: Basisverbindung in der Demo, Publishing-Freigabe erst nach Aboabschluss
 - HMAC-gesicherter OAuth-State, minimale Scopes und AES-256-GCM-verschlüsselte Token-Cookies für den Testbetrieb
 - Mollie First-Payment-Flow als Basis für monatliche Abonnements
@@ -64,6 +68,7 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 - Native CSS mit extrahierten Design-Tokens
 - Lucide Icons mit optimierten Paket-Imports
 - Next.js Route Handler für KI, Mollie und Webhooks
+- Nodemailer für einmalige SMTP-Einladungen; eingegebene SMTP-Secrets werden nicht dauerhaft im Browser gespeichert
 - Vercel für Preview-/Produktions-Deployments
 - PostgreSQL als vorgesehene Produktionsdatenbank (`database/schema.sql`)
 
