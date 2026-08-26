@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -37,7 +37,10 @@ import {
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { ContentComposer } from "@/components/dashboard/content-composer";
+import { AiStudio } from "@/components/dashboard/ai-studio";
+import { initialMediaAssets, MediaLibrary, type MediaAsset } from "@/components/dashboard/media-library";
 import { ScheduleItemDialog } from "@/components/dashboard/schedule-item-dialog";
+import { TrendRadar } from "@/components/trend-radar";
 import { logout } from "@/app/actions/auth";
 import { calendarAnchorDate, scheduleItems as initialScheduleItems, type Channel, type ScheduleItem } from "@/lib/data";
 import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/contracts";
@@ -53,7 +56,7 @@ const navItems: Array<{ name: DashboardView; icon: typeof Home; feature?: PlanFe
   { name: "Freigaben", icon: UsersRound, feature: "team_approvals" },
   { name: "Mediathek", icon: ImageIcon },
   { name: "KI-Studio", icon: WandSparkles },
-  { name: "Trends", icon: TrendingUp, feature: "trend_radar" },
+  { name: "Trends", icon: TrendingUp },
   { name: "Integrationen", icon: Plug },
   { name: "Abrechnung", icon: CircleDollarSign },
 ];
@@ -202,6 +205,7 @@ function Overview({
   onOpenItem,
   onPreviousWeek,
   onNextWeek,
+  onOpenTrends,
 }: {
   items: ScheduleItem[];
   onCreate: () => void;
@@ -213,6 +217,7 @@ function Overview({
   onOpenItem: (id: string) => void;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
+  onOpenTrends: () => void;
 }) {
   return (
     <>
@@ -264,7 +269,7 @@ function Overview({
               <div className="trend-radar__signal">
                 <TrendingUp aria-hidden="true" />
                 <div><strong>Behind-the-scenes Formate gewinnen an Tempo</strong><p>Mehr Marken setzen auf authentische Einblicke. Engagement steigt.</p></div>
-                <button>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
+                <button type="button" onClick={onOpenTrends}>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
               </div>
             </section>
           ) : (
@@ -361,11 +366,6 @@ function IntegrationsView({
         <div><span>3</span><strong>Automatisieren</strong><small>Planen, prüfen und veröffentlichen</small></div>
       </section>
 
-      <div className="connector-grid connector-grid--secondary">
-        {["Mollie", "Odoo", "CapCut", "PhotoAI"].map((name, index) => (
-          <div key={name}><span><LayoutGrid aria-hidden="true" /></span><strong>{name}</strong><small>{index < 2 ? "Konfigurierbar" : "Partnerzugang / Übergabe"}</small><ChevronRight aria-hidden="true" /></div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -396,7 +396,7 @@ function BillingView({ plan, internalTest }: { plan: PlanId; internalTest: boole
           <p>{planCatalog[plan].summary}</p>
         </div>
         <div className="plan-overview__price"><strong>{planCatalog[plan].price}</strong><span>/ Monat</span></div>
-        {internalTest ? <p className="plan-overview__test"><ShieldCheck aria-hidden="true" /> Interne Abo-Simulation – keine Mollie-Zahlung und keine Rechnung.</p> : null}
+        {internalTest ? <p className="plan-overview__test"><ShieldCheck aria-hidden="true" /> Interne Abo-Simulation – keine Abbuchung und keine Rechnung.</p> : null}
       </section>
       <section className="plan-overview__matrix" aria-labelledby="plan-matrix-title">
         <div><span className="feature-kicker">Stufentest</span><h2 id="plan-matrix-title">Feature-Zugriff je Tarif</h2></div>
@@ -422,6 +422,8 @@ function FeatureView({
   onOpenItem,
   onPreviousWeek,
   onNextWeek,
+  mediaAssets,
+  onMediaUpload,
   demo,
   connectors,
   plan,
@@ -435,6 +437,8 @@ function FeatureView({
   onOpenItem: (id: string) => void;
   onPreviousWeek: () => void;
   onNextWeek: () => void;
+  mediaAssets: MediaAsset[];
+  onMediaUpload: (files: File[]) => void;
   demo: boolean;
   connectors: SocialConnectorCard[];
   plan: PlanId;
@@ -444,14 +448,14 @@ function FeatureView({
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
     Freigaben: { title: "Teamfreigaben", text: "Prüfe Inhalte gemeinsam, sammle Feedback und dokumentiere Entscheidungen.", icon: UsersRound },
     Mediathek: { title: "Mediathek", text: "Rohmaterial, Entwürfe und veröffentlichte Assets an einem Ort.", icon: FileImage },
-    "KI-Studio": { title: "KI-Studio", text: "Erzeuge Captions und Hashtags mit deinem eigenen API-Key — ohne dauerhafte Speicherung.", icon: Sparkles },
-    Trends: { title: "Trendradar & Zielgruppenqualität", text: "Quellenbasierte Format-Signale und eine faire, manuelle Prüfung verdächtiger Profile.", icon: TrendingUp },
+    "KI-Studio": { title: "KI-Studio", text: "Caption, Hashtags, Hooks und Content-Recycling in einem fokussierten Arbeitsbereich.", icon: Sparkles },
+    Trends: { title: "Trendradar & Zielgruppenqualität", text: "Öffentliche Hashtag-Signale und individuelle Branchenideen mit nachvollziehbarer Quelle.", icon: TrendingUp },
     Integrationen: { title: "Integrationen", text: "Verwalte Plattformfreigaben, Provider-Status und sichere Verbindungstests.", icon: Plug },
-    Abrechnung: { title: "Abrechnung", text: "Mollie-Abonnement, Rechnungen und Planwechsel zentral verwalten.", icon: CircleDollarSign },
+    Abrechnung: { title: "Abrechnung", text: "Abonnement, Rechnungen und Planwechsel zentral verwalten.", icon: CircleDollarSign },
   };
   const feature = featureCopy[view];
   const Icon = feature.icon;
-  const restrictedFeature = view === "Trends" ? "trend_radar" : view === "Freigaben" ? "team_approvals" : null;
+  const restrictedFeature = view === "Freigaben" ? "team_approvals" : null;
   const restricted = !demo && Boolean(restrictedFeature && !planIncludes(plan, restrictedFeature));
 
   return (
@@ -467,11 +471,12 @@ function FeatureView({
           </div>
           <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} />
         </div>
+      ) : view === "Mediathek" ? (
+        <MediaLibrary assets={mediaAssets} onUpload={onMediaUpload} />
+      ) : view === "KI-Studio" ? (
+        <AiStudio mode={demo ? "demo" : "workspace"} />
       ) : view === "Trends" ? (
-        <div className="feature-view__split">
-          <section><span className="feature-kicker">Format-Signal · 7 Tage</span><h2>Behind-the-scenes beschleunigt.</h2><p>Deine Kurzvideos mit Produktions-Einblicken halten Zuschauer 18 % länger als dein Median. Teste drei neue Einstiege, ohne fremde Inhalte zu kopieren.</p><button className="button">Test erstellen</button></section>
-          <section><span className="feature-kicker">Zielgruppenqualität</span><h2>12 Profile prüfen</h2><p>Die Review-Liste nutzt Aktivitätsmuster, Accountalter und Engagement-Anomalien. Namen, Sprache oder Herkunft werden nicht bewertet.</p><button className="secondary-button"><UsersRound size={17} aria-hidden="true" /> Review öffnen</button></section>
-        </div>
+        <TrendRadar mode={demo ? "demo" : "workspace"} proAccess={planIncludes(plan, "trend_radar")} />
       ) : view === "Freigaben" ? (
         <div className="feature-view__split">
           <section><span className="feature-kicker">Freigabe offen</span><h2>TikTok-Reel final prüfen</h2><p>Caption, Format und Veröffentlichungszeit warten auf die Entscheidung des Teams.</p><button className="button">Review öffnen</button></section>
@@ -529,6 +534,8 @@ export function DashboardApp({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [items, setItems] = useState(initialScheduleItems);
+  const [mediaAssets, setMediaAssets] = useState(initialMediaAssets);
+  const uploadedMediaUrls = useRef<string[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [calendarWeekStart, setCalendarWeekStart] = useState(calendarAnchorDate);
   const [calendarFocusDate, setCalendarFocusDate] = useState(addCalendarDays(calendarAnchorDate, 2));
@@ -542,6 +549,10 @@ export function DashboardApp({
     const timeout = window.setTimeout(() => setToast(""), 4_200);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => () => {
+    uploadedMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
+  }, []);
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("de");
@@ -597,6 +608,22 @@ export function DashboardApp({
     setCalendarFocusDate((current) => addCalendarDays(current, amount * 7));
   }
 
+  function uploadMedia(files: File[]) {
+    const supported = files.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
+    if (!supported.length) {
+      setToast("Bitte wähle Bild- oder Videodateien aus.");
+      return;
+    }
+    const uploadDate = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date());
+    const uploaded = supported.map((file, index): MediaAsset => {
+      const preview = URL.createObjectURL(file);
+      uploadedMediaUrls.current.push(preview);
+      return { id: `upload-${Date.now()}-${index}`, name: file.name.replace(/\.[^/.]+$/, ""), kind: file.type.startsWith("video/") ? "video" : "image", preview, size: file.size, uploadedAt: uploadDate, uploadedInSession: true };
+    });
+    setMediaAssets((current) => [...uploaded, ...current]);
+    setToast(`${uploaded.length} ${uploaded.length === 1 ? "Datei wurde" : "Dateien wurden"} zur Mediathek hinzugefügt.`);
+  }
+
   function toggleSidebar() {
     if (window.matchMedia("(max-width: 720px)").matches) {
       setSidebarOpen(false);
@@ -648,12 +675,13 @@ export function DashboardApp({
               onCreate={openCreate}
               demo={isDemo}
               displayName={displayName}
-              trendAccess={isDemo || planIncludes(plan, "trend_radar")}
+              trendAccess
               weekStart={calendarWeekStart}
               focusDate={calendarFocusDate}
               onOpenItem={openItem}
               onPreviousWeek={() => changeWeek(-1)}
               onNextWeek={() => changeWeek(1)}
+              onOpenTrends={() => setActiveView("Trends")}
             />
           ) : (
             <FeatureView
@@ -665,6 +693,8 @@ export function DashboardApp({
               onOpenItem={openItem}
               onPreviousWeek={() => changeWeek(-1)}
               onNextWeek={() => changeWeek(1)}
+              mediaAssets={mediaAssets}
+              onMediaUpload={uploadMedia}
               demo={isDemo}
               connectors={connectors}
               plan={plan}

@@ -42,7 +42,7 @@ export default async function LoginPage({
             <li><Check aria-hidden="true" /> 3 Kanäle verbunden</li>
           </ul>
         </div>
-        <p>Die Live-Demo ist öffentlich. Mollie-Abos und interne Testkonten werden ausschließlich serverseitig freigeschaltet.</p>
+        <p>Die Live-Demo ist öffentlich. Abos und interne Testkonten werden ausschließlich serverseitig freigeschaltet.</p>
       </aside>
     </main>
   );

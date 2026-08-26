@@ -27,7 +27,7 @@ export default async function SubscribePage({
         <BrandMark />
         <div className="auth-page__intro">
           <h1>Abo aktivieren.</h1>
-          <p>Nach bestätigter Mollie-Zahlung wird dein Workspace freigeschaltet.</p>
+          <p>Nach bestätigter Zahlung wird dein Workspace freigeschaltet.</p>
         </div>
         <CheckoutForm plan={plan} planLabel={planNames[plan]} />
       </section>

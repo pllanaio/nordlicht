@@ -24,6 +24,7 @@ Der aktuelle Stand ist ein hochwertiger, interaktiver MVP. Er demonstriert das v
 |---|---|
 | `/` | Landingpage, Produkt-Workflow, Integrationen, Signale und Pricing |
 | `/demo` | Öffentliche, interaktive Live-Demo mit Account-Connect, Entwürfen und Planung |
+| `/trends` | Öffentlicher Trendradar mit Quellen und plattformspezifischen Hashtag-Signalen |
 | `/subscribe` | Planbezogener Mollie-Checkout mit Name und E-Mail |
 | `/login` | Anmeldung für bestehende Abonnenten |
 | `/dashboard` | Abonnementgeschütztes Command Center mit Kalender, Suche und Navigation |
@@ -35,7 +36,7 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 
 - Kanalübergreifender Wochenkalender mit Status, Erinnerungen und Freigaben
 - Lokaler Medien-Upload mit Bild-/Video-Vorschau
-- KI-Captions und Hashtags per persönlichem OpenAI API-Key (ephemer, nicht gespeichert)
+- KI-Studio für Captions, Hashtags, Hooks und Content-Recycling; als lokale Tech-Demo oder im Workspace per persönlichem API-Key
 - Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
 - OAuth-Connectoren für Instagram, LinkedIn und TikTok mit offiziellem Provider-Login
 - Progressive OAuth-Scopes: Basisverbindung in der Demo, Publishing-Freigabe erst nach Aboabschluss
@@ -43,11 +44,10 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 - Mollie First-Payment-Flow als Basis für monatliche Abonnements
 - Serverseitiges Abo-Gate für Workspace und KI-Endpunkt
 - Signierte, kurzlebige Berechtigung erst nach autoritativ bestätigter Mollie-Zahlung
-- Odoo-19-JSON-2-Adapter für CRM-/Projekt-Synchronisation
-- Kuratierte CapCut-/PhotoAI-Übergabe bis ein belastbarer Partner-API-Vertrag vorliegt
-- Trendradar auf Basis eigener Performance-Daten, Zeitraum und Quelle
+- Öffentlich einsehbarer Trendradar mit transparenter Abgrenzung zwischen öffentlichen Rankings und Themen-Signalen
+- KI-gestützte Branchen- und Zielgruppensuche im Pro-Tarif
 - Faire Zielgruppenprüfung anhand von Aktivitätsmustern mit manueller Bestätigung
-- Responsive Landingpage, Login und Workspace für Desktop und Mobilgeräte
+- Responsive Landingpage, Login und Workspace für Desktop und Mobilgeräte mit projektweitem Dark Mode
 
 ## Produktprinzipien
 
@@ -95,14 +95,12 @@ npm run build
 | `MOLLIE_API_KEY` | Checkout und First Payment | Nein |
 | `SUBSCRIPTION_SESSION_SECRET` | Signiert die kurzlebige Workspace-Berechtigung | Nein |
 | `INTERNAL_TEST_ACCOUNTS` | Serverseitige Testkonten mit Passwort-Hash und festem Tarif | Nein |
-| `OPENAI_API_KEY` | Optionaler serverseitiger KI-Fallback | Nein |
 | `META_APP_ID`, `META_APP_SECRET` | ContentDock-App bei Meta; Nutzer verbinden sich anschließend selbst | Für Instagram-Connect |
 | `META_GRAPH_VERSION`, `META_GRAPH_HOST` | Explizit pinbare Instagram-Graph-Version und API-Host | Nein |
 | `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` | ContentDock-App bei LinkedIn | Für LinkedIn-Connect |
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | ContentDock-App bei TikTok | Für TikTok-Connect |
 | `OAUTH_STATE_SECRET` | Signiert kurzlebige OAuth-Anfragen gegen Login-CSRF | Für Social Connect |
 | `SOCIAL_TOKEN_ENCRYPTION_KEY` | 32-Byte-Base64-Key für AES-256-GCM | Für Social Connect |
-| `ODOO_BASE_URL`, `ODOO_DATABASE`, `ODOO_API_KEY` | Odoo JSON-2 | Nein |
 
 Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals Werte aus `.env.local` committen.
 
@@ -124,7 +122,7 @@ Danach in Vercel unter `Project → Settings → Environment Variables` die Vari
 
 Den kompletten Platzhalterwert `scrypt$SALT$HASH` jeweils durch die vollständige Ausgabe des Befehls ersetzen. Für jedes Konto sollte ein eigener Hash verwendet werden. Zusätzlich muss `SUBSCRIPTION_SESSION_SECRET` mit mindestens 32 zufälligen Zeichen gesetzt sein. Nach dem Speichern ein neues Deployment auslösen.
 
-Die Anmeldung erfolgt regulär über `/login`. Nach erfolgreicher Prüfung erzeugt der Server eine signierte, 24 Stunden gültige HTTP-only-Sitzung. Im Workspace werden Tarif und Kennzeichnung `Testkonto` angezeigt. Starter sieht Teamfreigaben als Studio-Feature gesperrt; Starter und Studio sehen Trendradar sowie Algorithmus-Signale als Pro-Features gesperrt. Unter `Abrechnung` zeigt die Tarifmatrix den simulierten Zugriff. Abmelden und mit dem nächsten Testkonto anmelden ermöglicht den direkten Stufenvergleich. Es wird weder ein Mollie-Customer noch eine Zahlung oder Rechnung erzeugt.
+Die Anmeldung erfolgt regulär über `/login`. Nach erfolgreicher Prüfung erzeugt der Server eine signierte, 24 Stunden gültige HTTP-only-Sitzung. Im Workspace werden Tarif und Kennzeichnung `Testkonto` angezeigt. Starter sieht Teamfreigaben als Studio-Feature gesperrt; Starter und Studio können die öffentlichen Trends sehen, während die KI-gestützte Branchensuche Pro vorbehalten bleibt. Unter `Abrechnung` zeigt die Tarifmatrix den simulierten Zugriff. Abmelden und mit dem nächsten Testkonto anmelden ermöglicht den direkten Stufenvergleich. Es wird weder ein Mollie-Customer noch eine Zahlung oder Rechnung erzeugt.
 
 ### Social Connectoren
 
@@ -146,8 +144,6 @@ Die App-Credentials identifizieren ContentDock gegenüber dem Provider und werde
 - TikTok verlangt für Direct Post den Scope `video.publish`; nicht auditierte Clients können nur privat veröffentlichen. Die TikTok-UX muss Creator-Informationen und auswählbare Privacy-Optionen aus der API darstellen.
 - Mollie-Abos brauchen zunächst einen Customer und ein First Payment mit `sequenceType=first`, damit ein Mandat entsteht. Erst danach wird die Subscription angelegt.
 - Ein erfolgreicher UI-Redirect reicht nicht zur Freischaltung: ContentDock fragt den Zahlungsstatus serverseitig bei Mollie ab und setzt erst bei `paid` eine HTTP-only-Berechtigung.
-- Odoo 19 stellt die JSON-2-API bereit. Ein eigener Bot-Nutzer mit minimalen Rechten ist vorgesehen.
-- Für CapCut-Template-Suche und PhotoAI wurde keine belastbare öffentliche Entwickler-API als Produktvertrag dokumentiert. Der MVP nutzt deshalb Empfehlungen und Handoffs, bis Partnerzugänge vereinbart sind.
 
 Details und Primärquellen: [docs/PLATFORM-CAPABILITIES.md](docs/PLATFORM-CAPABILITIES.md).
 
@@ -179,7 +175,7 @@ docs/                            Architektur und Capability-Matrix
 
 ## Status
 
-Der MVP ist als Produkt- und Engineering-Fundament gedacht. Provider-Credentials sind absichtlich nicht enthalten. Ohne sie bleibt die Demo interaktiv, kann aber keine realen Social Accounts verbinden. Entwürfe, lokale Planung und Demo-Copy funktionieren weiterhin; echte KI-Generierung in der Demo benötigt den persönlichen API-Key. Veröffentlichung und produktiver Workspace bleiben abonnementgeschützt.
+Der MVP ist als Produkt- und Engineering-Fundament gedacht. Provider-Credentials sind absichtlich nicht enthalten. Ohne sie bleibt die Demo interaktiv, kann aber keine realen Social Accounts verbinden. Mediathek, Entwürfe, Planung, Trendradar und lokale KI-Tech-Demos funktionieren weiterhin. Im bezahlten Workspace benötigen KI-Anfragen immer den persönlichen API-Key; Veröffentlichung und produktiver Workspace bleiben abonnementgeschützt.
 
 ---
 

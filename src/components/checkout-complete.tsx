@@ -9,7 +9,7 @@ const checkoutStorageKey = "contentdock_checkout";
 
 export function CheckoutComplete() {
   const [status, setStatus] = useState<"checking" | "error">("checking");
-  const [message, setMessage] = useState("Mollie-Zahlung wird bestätigt …");
+  const [message, setMessage] = useState("Zahlung wird sicher bestätigt …");
 
   useEffect(() => {
     async function confirmPayment() {

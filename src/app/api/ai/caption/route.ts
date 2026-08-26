@@ -27,18 +27,13 @@ export async function POST(request: Request) {
   if (!entitlement && !isDemoRequest) {
     return NextResponse.json({ error: "Für diesen Zugriff ist ein aktives Abo erforderlich." }, { status: 403 });
   }
-  if (!entitlement && !personalApiKey) {
-    return NextResponse.json({ error: "In der Demo ist für echte KI-Generierung ein eigener API-Key erforderlich." }, { status: 400 });
-  }
-
-  const apiKey = personalApiKey ?? process.env.OPENAI_API_KEY;
-  if (!apiKey) return NextResponse.json({ error: "Kein API-Key übergeben." }, { status: 400 });
+  if (!personalApiKey) return NextResponse.json({ error: "Für KI-Funktionen ist dein persönlicher API-Key erforderlich." }, { status: 400 });
 
   const body = (await request.json()) as CaptionRequest;
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${personalApiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({

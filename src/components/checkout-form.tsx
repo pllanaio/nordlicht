@@ -58,7 +58,7 @@ export function CheckoutForm({ plan, planLabel }: { plan: string; planLabel: str
       </label>
       {error ? <p className="checkout-error" role="alert">{error}</p> : null}
       <button className="button auth-form__submit" disabled={loading}>
-        {loading ? "Mollie wird geöffnet …" : <>Zahlungspflichtig abonnieren <ArrowRight size={17} aria-hidden="true" /></>}
+        {loading ? "Sichere Zahlungsseite wird geöffnet …" : <>Zahlungspflichtig abonnieren <ArrowRight size={17} aria-hidden="true" /></>}
       </button>
       <Link className="auth-form__demo" href="/demo">Erst die Live-Demo ansehen</Link>
       <p>Mit Abschluss beginnt dein monatliches Abonnement.</p>

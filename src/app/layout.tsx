@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Manrope } from "next/font/google";
+import Script from "next/script";
+import { ThemeToggle } from "@/components/theme-toggle";
 import "./globals.css";
 
 const manrope = Manrope({
@@ -19,8 +21,20 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="de">
-      <body className={manrope.variable}>{children}</body>
+    <html lang="de" suppressHydrationWarning>
+      <body className={manrope.variable}>
+        {children}
+        <ThemeToggle />
+        <Script id="contentdock-theme" strategy="beforeInteractive">{`
+          try {
+            var savedTheme = localStorage.getItem('contentdock-theme-v1');
+            var preferredTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.dataset.theme = savedTheme || preferredTheme;
+          } catch (error) {
+            document.documentElement.dataset.theme = 'light';
+          }
+        `}</Script>
+      </body>
     </html>
   );
 }

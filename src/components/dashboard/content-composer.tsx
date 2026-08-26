@@ -57,8 +57,12 @@ export function ContentComposer({
 
   async function generateCopy() {
     if (!apiKey) {
-      setCaption(demoCopy.caption);
-      setHashtags(demoCopy.hashtags);
+      if (mode === "demo") {
+        setCaption(demoCopy.caption);
+        setHashtags(demoCopy.hashtags);
+        return;
+      }
+      setError("Bitte hinterlege deinen persönlichen KI API-Key.");
       return;
     }
     setGenerating(true);
@@ -120,7 +124,7 @@ export function ContentComposer({
               {error ? <p className="composer-error">{error}</p> : null}
               <button className="secondary-button composer-generate" onClick={generateCopy} disabled={generating}>
                 {generating ? <LoaderCircle className="is-spinning" aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
-                {apiKey ? "Mit eigenem Key neu erzeugen" : "Demo-Vorschlag erzeugen"}
+                {apiKey ? "Mit eigenem Key neu erzeugen" : mode === "demo" ? "Demo-Vorschlag erzeugen" : "API-Key erforderlich"}
               </button>
             </div>
           ) : null}

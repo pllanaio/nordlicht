@@ -143,16 +143,15 @@ function WorkflowSection() {
       </div>
       <div className="integration-band" id="integrationen">
         <div className="integration-band__intro">
-          <h3>Passt in deinen Stack.</h3>
-          <p>Verbinde die Tools, die du schon nutzt. Alles an einem Ort.</p>
+          <h3>Deine Social-Kanäle.</h3>
+          <p>Verbinde die Accounts, auf denen dein Content erscheinen soll.</p>
           <Link href="/demo">Integrationen in der Demo <ArrowRight size={17} aria-hidden="true" /></Link>
         </div>
         <div className="integration-list">
           {[
-            ["mollie", "Zahlungen & Abos synchronisieren.", "Bereit"],
-            ["odoo", "Kunden und Projekte verknüpfen.", "In Prüfung"],
-            ["CapCut", "Passende Video-Vorlagen empfehlen.", "Vorlagen"],
-            ["PhotoAI", "Bildideen und Übergabe vorbereiten.", "Partnerzugang"],
+            ["Instagram", "Fotos, Reels und Insights verbinden.", "OAuth"],
+            ["TikTok", "Videos und Entwürfe sicher übergeben.", "Review"],
+            ["LinkedIn", "Beiträge für Profile und Seiten planen.", "OAuth"],
           ].map(([name, description, status]) => (
             <div className="integration-row" key={name}>
               <strong>{name}</strong><span>{description}</span><em>{status}</em><ArrowRight size={16} aria-hidden="true" />
@@ -173,7 +172,7 @@ export default function Home() {
           <a href="#produkt">Produkt</a>
           <a href="#integrationen">Integrationen</a>
           <a href="#preise">Preise</a>
-          <a href="#ressourcen">Ressourcen</a>
+          <Link href="/trends">Trendradar</Link>
         </nav>
         <div className="site-header__actions">
           <Link href="/login" className="text-link">Anmelden</Link>
@@ -194,7 +193,7 @@ export default function Home() {
       </section>
 
       <div className="logo-rail" aria-label="Unterstützte Plattformen">
-        <span>Meta</span><span>TikTok</span><span>YouTube</span><span>odoo</span><span>mollie</span>
+        <span>Instagram</span><span>TikTok</span><span>LinkedIn</span><span>YouTube</span>
       </div>
 
       <WorkflowSection />
@@ -221,7 +220,7 @@ export default function Home() {
             <li><Check aria-hidden="true" /> Vorschläge statt blindem Kopieren</li>
             <li><Check aria-hidden="true" /> Manuelle Freigabe vor jeder Aktion</li>
           </ul>
-          <Link href="/demo" className="text-link text-link--arrow">Trendradar in der Demo ansehen <ArrowRight size={17} aria-hidden="true" /></Link>
+          <Link href="/trends" className="text-link text-link--arrow">Öffentlichen Trendradar öffnen <ArrowRight size={17} aria-hidden="true" /></Link>
         </div>
       </section>
 
@@ -247,7 +246,7 @@ export default function Home() {
         {[
           ["Kann ich meinen eigenen KI-Key nutzen?", "Ja. Der Schlüssel wird nur für deine jeweilige Anfrage verwendet und im Demo-MVP nicht gespeichert."],
           ["Welche Netzwerke werden unterstützt?", "Der MVP bereitet Meta, TikTok und LinkedIn vor. Live-Veröffentlichungen benötigen jeweils App-Review und Nutzerfreigabe."],
-          ["Kann ich monatlich kündigen?", "Ja. Die Mollie-Abos sind monatlich angelegt und können zum Ende des laufenden Abrechnungszeitraums beendet werden."],
+          ["Kann ich monatlich kündigen?", "Ja. Die Abos sind monatlich angelegt und können zum Ende des laufenden Abrechnungszeitraums beendet werden."],
         ].map(([question, answer]) => (
           <details key={question}>
             <summary>{question}<ChevronDown aria-hidden="true" /></summary>
