@@ -7,7 +7,7 @@ const allowedPlans = new Set(["starter", "studio", "pro"]);
 export async function POST(request: Request) {
   const body = (await request.json()) as { plan?: string; email?: string; name?: string };
   const plan = body.plan && allowedPlans.has(body.plan) ? body.plan : "studio";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
+  const appUrl = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? new URL(request.url).origin;
 
   if (!process.env.MOLLIE_API_KEY || !process.env.SUBSCRIPTION_SESSION_SECRET) {
     return NextResponse.json({ error: "Der Checkout ist noch nicht konfiguriert. Nutze solange die Live-Demo." }, { status: 503 });

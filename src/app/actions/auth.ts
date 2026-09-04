@@ -32,6 +32,7 @@ export async function loginInternalTestAccount(
     plan: account.plan,
     source: "internal-test",
     displayName: account.name,
+    email: account.email,
   });
 
   (await cookies()).set(subscriptionCookieName, token, {

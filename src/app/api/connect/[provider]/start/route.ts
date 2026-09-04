@@ -14,7 +14,7 @@ import {
 export const runtime = "nodejs";
 
 function appOrigin(request: NextRequest) {
-  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL;
+  const configuredOrigin = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
   if (!configuredOrigin) return request.nextUrl.origin;
   try {
     return new URL(configuredOrigin).origin;

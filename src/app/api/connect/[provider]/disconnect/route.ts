@@ -7,7 +7,8 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ provider: string }> }) {
   const mode = request.nextUrl.searchParams.get("mode") === "demo" ? "demo" : "workspace";
-  if (mode === "workspace" && !(await getSubscriptionEntitlement())) {
+  const entitlement = mode === "workspace" ? await getSubscriptionEntitlement() : null;
+  if (mode === "workspace" && !entitlement) {
     return NextResponse.redirect(new URL("/login?reason=subscription", request.url), 303);
   }
 
@@ -16,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return Response.json({ error: "Unsupported social provider" }, { status: 404 });
   }
 
-  await deleteSocialConnection(provider);
+  await deleteSocialConnection(provider, mode === "demo" ? { mode: "demo" } : { mode: "workspace", entitlement: entitlement! });
   const url = new URL(mode === "demo" ? "/demo" : "/dashboard", request.url);
   url.searchParams.set("view", "integrations");
   url.searchParams.set("provider", provider);

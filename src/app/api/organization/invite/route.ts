@@ -3,11 +3,10 @@ import net from "node:net";
 import nodemailer from "nodemailer";
 import { NextResponse } from "next/server";
 import { getSubscriptionEntitlement } from "@/lib/subscription-access";
+import { getWorkspaceInvitationSettings } from "@/lib/workspace-store";
 
 type InviteRequest = {
-  organizationName?: string;
   member?: { firstName?: string; lastName?: string; email?: string; role?: "Administrator" | "Manager" };
-  smtp?: { host?: string; port?: string; username?: string; password?: string; fromEmail?: string; encryption?: "STARTTLS" | "SSL/TLS" };
 };
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -34,16 +33,18 @@ export async function POST(request: Request) {
   if (!entitlement) return NextResponse.json({ error: "Für Einladungen ist ein aktives Abo erforderlich." }, { status: 403 });
 
   const body = (await request.json()) as InviteRequest;
-  const organizationName = clean(body.organizationName, 100);
+  const settings = await getWorkspaceInvitationSettings(entitlement);
+  if (!settings) return NextResponse.json({ error: "SMTP ist nicht vollständig konfiguriert oder du hast keine Administratorrechte." }, { status: 403 });
+  const organizationName = clean(settings.organizationName, 100);
   const firstName = clean(body.member?.firstName, 80);
   const lastName = clean(body.member?.lastName, 80);
   const recipient = clean(body.member?.email, 200).toLowerCase();
   const role = body.member?.role === "Administrator" ? "Administrator" : "Manager";
-  const host = clean(body.smtp?.host, 253).toLowerCase();
-  const username = clean(body.smtp?.username, 250);
-  const password = body.smtp?.password?.slice(0, 500) ?? "";
-  const fromEmail = clean(body.smtp?.fromEmail, 200).toLowerCase();
-  const port = Number(body.smtp?.port);
+  const host = clean(settings.host, 253).toLowerCase();
+  const username = clean(settings.username, 250);
+  const password = settings.password.slice(0, 500);
+  const fromEmail = clean(settings.fromEmail, 200).toLowerCase();
+  const port = settings.port;
 
   if (!organizationName || !firstName || !lastName || !emailPattern.test(recipient) || !emailPattern.test(fromEmail) || !host || !username || !password || !Number.isInteger(port) || port < 1 || port > 65_535) {
     return NextResponse.json({ error: "Einladung oder SMTP-Konfiguration ist unvollständig." }, { status: 400 });
@@ -58,8 +59,8 @@ export async function POST(request: Request) {
     const transport = nodemailer.createTransport({
       host: publicAddress.address,
       port,
-      secure: body.smtp?.encryption === "SSL/TLS",
-      requireTLS: body.smtp?.encryption !== "SSL/TLS",
+      secure: settings.encryption === "SSL/TLS",
+      requireTLS: settings.encryption !== "SSL/TLS",
       auth: { user: username, pass: password },
       tls: { servername: host, rejectUnauthorized: true },
       connectionTimeout: 10_000,

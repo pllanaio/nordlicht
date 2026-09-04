@@ -39,15 +39,16 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { ContentComposer } from "@/components/dashboard/content-composer";
 import { AiStudio } from "@/components/dashboard/ai-studio";
-import { initialMediaAssets, MediaLibrary, type MediaAsset } from "@/components/dashboard/media-library";
-import { initialOrganization, OrganizationManager, type Organization } from "@/components/dashboard/organization-manager";
-import { ProfileDialog, type UserProfile } from "@/components/dashboard/profile-dialog";
+import { initialMediaAssets, MediaLibrary } from "@/components/dashboard/media-library";
+import { initialOrganization, OrganizationManager } from "@/components/dashboard/organization-manager";
+import { ProfileDialog } from "@/components/dashboard/profile-dialog";
 import { ScheduleItemDialog } from "@/components/dashboard/schedule-item-dialog";
 import { TrendRadar } from "@/components/trend-radar";
 import { logout } from "@/app/actions/auth";
 import { calendarAnchorDate, scheduleItems as initialScheduleItems, type Channel, type ScheduleItem } from "@/lib/data";
 import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/contracts";
 import { minimumPlanFor, planCatalog, planIds, planIncludes, type PlanFeature, type PlanId } from "@/lib/plans";
+import type { MediaAsset, Organization, UserProfile, WorkspaceDashboardData } from "@/lib/workspace-types";
 
 export type DashboardView = "Übersicht" | "Kalender" | "Freigaben" | "Organisation" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
 
@@ -66,6 +67,31 @@ const navItems: Array<{ name: DashboardView; icon: typeof Home; feature?: PlanFe
 ];
 
 const managerViews = new Set<DashboardView>(["Übersicht", "Kalender", "Freigaben", "Mediathek", "KI-Studio", "Trends"]);
+const demoCookieNames = {
+  items: "contentdock_demo_items_v1",
+  organization: "contentdock_demo_organization_v1",
+  profile: "contentdock_demo_profile_v1",
+};
+
+function readDemoCookie<T>(name: string): T | undefined {
+  const prefix = `${name}=`;
+  const value = document.cookie.split("; ").find((entry) => entry.startsWith(prefix))?.slice(prefix.length);
+  if (!value) return undefined;
+  try {
+    return JSON.parse(decodeURIComponent(value)) as T;
+  } catch {
+    return undefined;
+  }
+}
+
+function writeDemoCookie(name: string, value: unknown) {
+  try {
+    const secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${name}=${encodeURIComponent(JSON.stringify(value))}; Path=/; SameSite=Lax${secure}`;
+  } catch {
+    // The public demo remains usable in memory when cookies are disabled or full.
+  }
+}
 
 const channelClass: Record<Channel, string> = {
   Instagram: "instagram",
@@ -485,6 +511,7 @@ function FeatureView({
   onOpenOrganization,
   profile,
   currentRole,
+  onBeforeInvite,
 }: {
   view: Exclude<DashboardView, "Übersicht">;
   onCreate: () => void;
@@ -508,6 +535,7 @@ function FeatureView({
   onOpenOrganization: () => void;
   profile: UserProfile;
   currentRole: "Administrator" | "Manager";
+  onBeforeInvite: () => Promise<void>;
 }) {
   const featureCopy: Record<Exclude<DashboardView, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
@@ -538,13 +566,13 @@ function FeatureView({
           <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} onSelectDay={onSelectDay} />
         </div>
       ) : view === "Mediathek" ? (
-        <MediaLibrary assets={mediaAssets} onUpload={onMediaUpload} />
+        <MediaLibrary assets={mediaAssets} onUpload={onMediaUpload} persistent={!demo} />
       ) : view === "KI-Studio" ? (
         <AiStudio mode={demo ? "demo" : "workspace"} />
       ) : view === "Trends" ? (
         <TrendRadar mode={demo ? "demo" : "workspace"} proAccess={planIncludes(plan, "trend_radar")} />
       ) : view === "Organisation" ? (
-        <OrganizationManager organization={organization} demo={demo} currentUser={profile} onChange={onOrganizationChange} onDelete={onOrganizationDelete} onToast={onToast} />
+        <OrganizationManager organization={organization} demo={demo} currentUser={profile} onChange={onOrganizationChange} onDelete={onOrganizationDelete} onToast={onToast} onBeforeInvite={onBeforeInvite} />
       ) : view === "Freigaben" ? (
         <div className="approval-workspace">
           <section className="approval-workspace__organization"><div><span className="feature-kicker">Organisation</span><h2>{organization?.name ?? "Noch keine Organisation"}</h2><p>{organization ? `${organization.members.length} Mitglieder können entsprechend ihrer Rolle zusammenarbeiten.` : "Lege zuerst eine Organisation für Teamfreigaben an."}</p></div>{currentRole === "Administrator" ? <button className="secondary-button" type="button" onClick={onOpenOrganization}><Building2 aria-hidden="true" /> Organisation verwalten</button> : <span className="approval-workspace__role"><ShieldCheck aria-hidden="true" /> Manager</span>}</section>
@@ -589,6 +617,7 @@ export function DashboardApp({
   plan = "pro",
   initialView = "Übersicht",
   connectorFeedback,
+  initialWorkspaceData,
 }: {
   mode?: "workspace" | "demo";
   connectors?: SocialConnectorCard[];
@@ -597,30 +626,37 @@ export function DashboardApp({
   plan?: PlanId;
   initialView?: DashboardView;
   connectorFeedback?: ConnectorFeedback;
+  initialWorkspaceData?: WorkspaceDashboardData;
 }) {
+  const isDemo = mode === "demo";
   const [activeView, setActiveView] = useState<DashboardView>(initialView);
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [items, setItems] = useState(initialScheduleItems);
-  const [mediaAssets, setMediaAssets] = useState(initialMediaAssets);
-  const [organization, setOrganization] = useState<Organization | null>(initialOrganization);
+  const [items, setItems] = useState(() => isDemo ? initialScheduleItems : initialWorkspaceData?.items ?? []);
+  const [mediaAssets, setMediaAssets] = useState(() => isDemo ? initialMediaAssets : initialWorkspaceData?.mediaAssets ?? []);
+  const [organization, setOrganization] = useState<Organization | null>(() => isDemo ? initialOrganization : initialWorkspaceData?.organization ?? null);
   const [profile, setProfile] = useState<UserProfile>(() => {
+    if (!isDemo && initialWorkspaceData) return initialWorkspaceData.profile;
     const names = displayName.trim().split(/\s+/);
     return { firstName: isNaN(Number(names[0])) ? (names[0] || "Lea") : "Lea", lastName: names.slice(1).join(" ") || "Nordlicht", email: mode === "demo" ? "lea@nordlicht.studio" : "konto@contentdock.app", avatarUrl: "" };
   });
   const uploadedMediaUrls = useRef<string[]>([]);
   const profileMediaUrls = useRef<string[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [calendarWeekStart, setCalendarWeekStart] = useState(calendarAnchorDate);
-  const [calendarFocusDate, setCalendarFocusDate] = useState(addCalendarDays(calendarAnchorDate, 2));
+  const initialCalendarDate = isDemo ? calendarAnchorDate : initialWorkspaceData?.calendarAnchorDate ?? toCalendarDate(new Date());
+  const [calendarWeekStart, setCalendarWeekStart] = useState(() => getWeekStart(initialCalendarDate));
+  const [calendarFocusDate, setCalendarFocusDate] = useState(() => isDemo ? addCalendarDays(initialCalendarDate, 2) : initialCalendarDate);
   const [activeDraftIndex, setActiveDraftIndex] = useState(0);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(() => new Set());
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState(() => connectorFeedbackMessage(connectorFeedback));
-  const isDemo = mode === "demo";
+  const persistenceRevision = useRef(initialWorkspaceData?.revision ?? 0);
+  const persistenceStarted = useRef(false);
+  const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
+  const demoCookiesHydrated = useRef(false);
   const activePlan = planCatalog[plan];
   const profileName = `${profile.firstName} ${profile.lastName}`.trim();
   const profileInitial = profile.firstName.trim().slice(0, 1).toLocaleUpperCase("de") || "U";
@@ -635,6 +671,57 @@ export function DashboardApp({
     uploadedMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
     profileMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
   }, []);
+
+  useEffect(() => {
+    if (!isDemo) return;
+    const storedItems = readDemoCookie<ScheduleItem[]>(demoCookieNames.items);
+    const storedOrganization = readDemoCookie<Organization | null>(demoCookieNames.organization);
+    const storedProfile = readDemoCookie<UserProfile>(demoCookieNames.profile);
+    const hydrateTimeout = window.setTimeout(() => {
+      if (Array.isArray(storedItems)) setItems(storedItems);
+      if (storedOrganization !== undefined) setOrganization(storedOrganization);
+      if (storedProfile?.firstName && storedProfile?.email) setProfile({ ...storedProfile, avatarUrl: storedProfile.avatarUrl.startsWith("blob:") ? "" : storedProfile.avatarUrl });
+      demoCookiesHydrated.current = true;
+    }, 0);
+    return () => window.clearTimeout(hydrateTimeout);
+  }, [isDemo]);
+
+  useEffect(() => {
+    if (!isDemo || !demoCookiesHydrated.current) return;
+    writeDemoCookie(demoCookieNames.items, items);
+    writeDemoCookie(demoCookieNames.organization, organization);
+    writeDemoCookie(demoCookieNames.profile, { ...profile, avatarUrl: profile.avatarUrl.startsWith("blob:") ? "" : profile.avatarUrl });
+  }, [isDemo, items, organization, profile]);
+
+  useEffect(() => {
+    if (isDemo || !initialWorkspaceData) return;
+    if (!persistenceStarted.current) {
+      persistenceStarted.current = true;
+      return;
+    }
+
+    const snapshot = { items, organization, profile };
+    const timeout = window.setTimeout(() => {
+      persistenceQueue.current = persistenceQueue.current
+        .catch(() => undefined)
+        .then(async () => {
+          const response = await fetch("/api/workspace/state", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...snapshot, revision: persistenceRevision.current }),
+          });
+          const result = (await response.json()) as { saved?: boolean; revision?: number; error?: string };
+          if (!response.ok || !result.saved || typeof result.revision !== "number") {
+            throw new Error(result.error ?? "Workspace-Daten konnten nicht gespeichert werden.");
+          }
+          persistenceRevision.current = result.revision;
+        })
+        .catch((cause) => {
+          setToast(cause instanceof Error ? cause.message : "Workspace-Daten konnten nicht gespeichert werden.");
+        });
+    }, 450);
+    return () => window.clearTimeout(timeout);
+  }, [initialWorkspaceData, isDemo, items, organization, profile]);
 
   const filteredItems = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("de");
@@ -660,7 +747,7 @@ export function DashboardApp({
 
   function addContent(content: { title: string; channel: Channel; caption: string; date: string; time: string }) {
     const nextItem: ScheduleItem = {
-      id: `new-${Date.now()}`,
+      id: crypto.randomUUID(),
       date: content.date,
       time: content.time,
       title: content.title || "Neuer Content",
@@ -697,7 +784,7 @@ export function DashboardApp({
   function deleteItem(id: string) {
     setItems((current) => current.filter((item) => item.id !== id));
     setSelectedItemId(null);
-    setToast("Beitrag wurde aus dem Demo-Kalender gelöscht.");
+    setToast(isDemo ? "Beitrag wurde aus dem Demo-Kalender gelöscht." : "Beitrag wurde dauerhaft aus dem Workspace gelöscht.");
   }
 
   function changeWeek(amount: number) {
@@ -738,12 +825,26 @@ export function DashboardApp({
     setToast("Organisation, Mitglieder und lokale Demo-Inhalte wurden entfernt.");
   }
 
-  function saveProfile(nextProfile: UserProfile, avatarFile?: File) {
+  async function saveProfile(nextProfile: UserProfile, avatarFile?: File) {
     let avatarUrl = nextProfile.avatarUrl;
     if (avatarFile) {
-      if (profile.avatarUrl.startsWith("blob:")) URL.revokeObjectURL(profile.avatarUrl);
-      avatarUrl = URL.createObjectURL(avatarFile);
-      profileMediaUrls.current.push(avatarUrl);
+      if (isDemo) {
+        if (profile.avatarUrl.startsWith("blob:")) URL.revokeObjectURL(profile.avatarUrl);
+        avatarUrl = URL.createObjectURL(avatarFile);
+        profileMediaUrls.current.push(avatarUrl);
+      } else {
+        const formData = new FormData();
+        formData.set("avatar", avatarFile);
+        try {
+          const response = await fetch("/api/workspace/profile/avatar", { method: "POST", body: formData });
+          const result = (await response.json()) as { avatarUrl?: string; error?: string };
+          if (!response.ok || !result.avatarUrl) throw new Error(result.error ?? "Das Profilbild konnte nicht gespeichert werden.");
+          avatarUrl = result.avatarUrl;
+        } catch (cause) {
+          setToast(cause instanceof Error ? cause.message : "Das Profilbild konnte nicht gespeichert werden.");
+          return;
+        }
+      }
     }
     setOrganization((current) => current ? { ...current, members: current.members.map((member) => member.email.toLocaleLowerCase() === profile.email.toLocaleLowerCase() ? { ...member, firstName: nextProfile.firstName, lastName: nextProfile.lastName, email: nextProfile.email } : member) } : current);
     setProfile({ ...nextProfile, avatarUrl });
@@ -751,12 +852,27 @@ export function DashboardApp({
     setToast("Dein Profil wurde aktualisiert.");
   }
 
-  function uploadMedia(files: File[]) {
+  async function uploadMedia(files: File[]) {
     const supported = files.filter((file) => file.type.startsWith("image/") || file.type.startsWith("video/"));
     if (!supported.length) {
       setToast("Bitte wähle Bild- oder Videodateien aus.");
       return;
     }
+    if (!isDemo) {
+      const formData = new FormData();
+      supported.forEach((file) => formData.append("files", file));
+      try {
+        const response = await fetch("/api/workspace/media", { method: "POST", body: formData });
+        const result = (await response.json()) as { assets?: MediaAsset[]; error?: string };
+        if (!response.ok || !result.assets) throw new Error(result.error ?? "Das Material konnte nicht gespeichert werden.");
+        setMediaAssets((current) => [...result.assets!, ...current]);
+        setToast(`${result.assets.length} ${result.assets.length === 1 ? "Datei wurde" : "Dateien wurden"} dauerhaft gespeichert.`);
+      } catch (cause) {
+        setToast(cause instanceof Error ? cause.message : "Das Material konnte nicht gespeichert werden.");
+      }
+      return;
+    }
+
     const uploadDate = new Intl.DateTimeFormat("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date());
     const uploaded = supported.map((file, index): MediaAsset => {
       const preview = URL.createObjectURL(file);
@@ -773,6 +889,23 @@ export function DashboardApp({
       return;
     }
     setSidebarCollapsed((current) => !current);
+  }
+
+  async function persistWorkspaceNow() {
+    if (isDemo || !initialWorkspaceData) return;
+    await persistenceQueue.current.catch(() => undefined);
+    const response = await fetch("/api/workspace/state", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items, organization, profile, revision: persistenceRevision.current }),
+    });
+    const result = (await response.json()) as { saved?: boolean; revision?: number; error?: string };
+    if (!response.ok || !result.saved || typeof result.revision !== "number") {
+      const message = result.error ?? "Workspace-Daten konnten nicht gespeichert werden.";
+      setToast(message);
+      throw new Error(message);
+    }
+    persistenceRevision.current = result.revision;
   }
 
   return (
@@ -859,6 +992,7 @@ export function DashboardApp({
               onOpenOrganization={() => setActiveView("Organisation")}
               profile={profile}
               currentRole={currentRole}
+              onBeforeInvite={persistWorkspaceNow}
             />
           )}
         </div>

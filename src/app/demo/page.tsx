@@ -20,7 +20,7 @@ export default async function DemoPage({
 }: {
   searchParams: Promise<{ view?: string; provider?: string; connection_status?: string }>;
 }) {
-  const [connectors, query] = await Promise.all([getSocialConnectorCards(), searchParams]);
+  const [connectors, query] = await Promise.all([getSocialConnectorCards({ mode: "demo" }), searchParams]);
   return (
     <DashboardApp
       mode="demo"

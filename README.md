@@ -30,21 +30,21 @@ Der aktuelle Stand ist ein hochwertiger, interaktiver MVP. Er demonstriert das v
 | `/dashboard` | Abonnementgeschütztes Command Center mit Kalender, Suche und Navigation |
 | `/dashboard` → `Content erstellen` | Geschützter Upload-, KI-Text- und Planungs-Flow |
 
-Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur Anmeldung. In der öffentlichen Live-Demo können Nutzer reale Accounts mit minimalen Identitäts-Scopes verbinden, Content lokal erstellen und planen. Nur der tatsächliche Publish-Aufruf und die dafür nötigen Schreibrechte bleiben abonnementgeschützt.
+Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur Anmeldung. In der öffentlichen Live-Demo können Nutzer reale Accounts mit minimalen Identitäts-Scopes verbinden, Content cookiebasiert erstellen und planen. Angemeldete Workspaces speichern ihre fachlichen Daten in PostgreSQL. Nur der tatsächliche Publish-Aufruf und die dafür nötigen Schreibrechte bleiben abonnementgeschützt.
 
 ## Produktumfang
 
 - Kanalübergreifender Wochenkalender mit Status, Erinnerungen und Freigaben
 - Dynamische Erinnerungen und Entwurfsqueue, die unmittelbar auf Kalender-, Status- und Connector-Änderungen reagieren
 - Auswählbare Kalendertage, ISO-Kalenderwochen sowie direkt bearbeitbare Entwürfe und Freigaben
-- Lokaler Medien-Upload mit Bild-/Video-Vorschau
+- Medien-Upload mit Bild-/Video-Vorschau; sitzungsgebunden in der Demo und datenbankpersistiert im angemeldeten Test-Workspace
 - KI-Studio für Captions, Hashtags, Hooks und Content-Recycling; als lokale Tech-Demo oder im Workspace per persönlichem API-Key
 - Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
 - OAuth-Connectoren für Instagram, LinkedIn und TikTok mit offiziellem Provider-Login
 - Organisationsverwaltung mit Administrator-/Manager-RBAC, Mitgliederverwaltung und geschütztem SMTP-Einladungsversand
 - Bearbeitbares Benutzerprofil und datenbasiertes Benachrichtigungsmenü
 - Progressive OAuth-Scopes: Basisverbindung in der Demo, Publishing-Freigabe erst nach Aboabschluss
-- HMAC-gesicherter OAuth-State, minimale Scopes und AES-256-GCM-verschlüsselte Token-Cookies für den Testbetrieb
+- HMAC-gesicherter OAuth-State, minimale Scopes sowie verschlüsselte Token-Cookies in der Demo und persistente Social-Verbindungen im Workspace
 - Mollie First-Payment-Flow als Basis für monatliche Abonnements
 - Serverseitiges Abo-Gate für Workspace und KI-Endpunkt
 - Signierte, kurzlebige Berechtigung erst nach autoritativ bestätigter Mollie-Zahlung
@@ -68,9 +68,9 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 - Native CSS mit extrahierten Design-Tokens
 - Lucide Icons mit optimierten Paket-Imports
 - Next.js Route Handler für KI, Mollie und Webhooks
-- Nodemailer für einmalige SMTP-Einladungen; eingegebene SMTP-Secrets werden nicht dauerhaft im Browser gespeichert
-- Vercel für Preview-/Produktions-Deployments
-- PostgreSQL als vorgesehene Produktionsdatenbank (`database/schema.sql`)
+- Nodemailer für SMTP-Einladungen; Zugangsdaten liegen ausschließlich serverseitig und AES-256-GCM-verschlüsselt in PostgreSQL
+- Vercel oder Docker Compose für Preview-/Produktions-Deployments
+- PostgreSQL mit versionierten Migrationen unter `database/migrations/`
 
 ## Lokaler Start
 
@@ -92,11 +92,70 @@ npm run lint
 npm run build
 ```
 
+## Docker Compose
+
+Der Compose-Stack startet die produktive Next.js-Standalone-Anwendung zusammen mit PostgreSQL 16. Die Datenbank ist nur im internen Compose-Netz erreichbar, wird über ein benanntes Volume persistiert und vor jedem App-Start über den einmaligen `migrate`-Service aktualisiert.
+
+```bash
+cp .env.docker.example .env.docker
+docker compose --env-file .env.docker build app
+```
+
+Die benötigten Secrets können nach dem Build direkt im Anwendungscontainer erzeugt werden. Den Befehl für jedes Secret separat ausführen und die Ausgaben in `.env.docker` einsetzen:
+
+```bash
+docker compose --env-file .env.docker run --rm --no-deps app node scripts/generate-secret.mjs
+```
+
+Für ein internes Testkonto kann auch der scrypt-Hash im Container erzeugt werden:
+
+```bash
+docker compose --env-file .env.docker run --rm --no-deps app \
+  node scripts/hash-test-password.mjs 'ein-passwort-mit-mindestens-12-zeichen'
+```
+
+Den vollständigen Hash anschließend in `INTERNAL_TEST_ACCOUNTS` einsetzen. Das JSON in `.env.docker` muss in einfachen Anführungszeichen stehen, damit Compose die `$`-Zeichen des Hashes nicht als Variablen interpretiert.
+
+Stack starten und prüfen:
+
+```bash
+docker compose --env-file .env.docker up -d
+docker compose --env-file .env.docker ps
+curl http://localhost:3000/api/health
+```
+
+Die erwartete Health-Antwort enthält `"status":"healthy"` und `"database":"contentdock"`. Die Anwendung verwendet den eingeschränkten `POSTGRES_APP_USER`; Schema-Initialisierung und administrative Diagnose laufen getrennt über `POSTGRES_USER`.
+
+Datenbankzugriff für Diagnosezwecke:
+
+```bash
+docker compose --env-file .env.docker exec database \
+  sh -lc 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+```
+
+Logs und reguläres Stoppen:
+
+```bash
+docker compose --env-file .env.docker logs -f app
+docker compose --env-file .env.docker down
+```
+
+`docker compose down` behält das Datenbankvolume. `docker compose down -v` löscht dagegen die gesamte lokale Datenbank unwiderruflich. Das PostgreSQL-Entrypoint-Skript legt nur beim ersten Start die eingeschränkte App-Rolle an. Das Schema wird unabhängig davon bei jedem Start über versionierte Migrationen aktualisiert.
+
+Für eine öffentlich erreichbare Instanz muss `APP_URL` auf die endgültige HTTPS-Domain zeigen. Vor dem Container sollte außerdem ein Reverse Proxy wie Caddy, Traefik oder nginx TLS, Request-Limits und Rate-Limiting übernehmen.
+
+Die öffentliche Demo bleibt vom Mandantenspeicher getrennt und hält Kalender-, Organisations- und Profildaten in sitzungsgebundenen Cookies. Angemeldete Workspaces persistieren Profil, Organisation, Mitglieder/Einladungen, SMTP-Konfiguration, Kalenderinhalte, Medien und Social-Verbindungen in PostgreSQL. SMTP- und Provider-Tokens werden vor dem Schreiben mit getrennten AES-256-GCM-Schlüsseln verschlüsselt.
+
+Vor jedem App-Start führt der einmalige `migrate`-Service noch nicht angewendete Dateien aus `database/migrations/` unter einem PostgreSQL-Advisory-Lock aus. Dateiname und SHA-256-Prüfsumme werden in `schema_migration` protokolliert; bereits ausgeführte Migrationen dürfen nachträglich nicht verändert werden.
+
 ## Konfiguration
 
 | Variable | Zweck | Erforderlich für Demo? |
 |---|---|---:|
-| `NEXT_PUBLIC_APP_URL` | Redirects und Webhook-URL | Nein |
+| `APP_URL` | Serverseitige kanonische URL für Redirects und Webhooks | Für Docker/Produktion empfohlen |
+| `NEXT_PUBLIC_APP_URL` | Bisherige Vercel-URL; Fallback, wenn `APP_URL` fehlt | Nein |
+| `DATABASE_URL` | PostgreSQL-Verbindung außerhalb von Compose | Für Datenbankzugriff |
+| `DATABASE_POOL_MAX` | Maximale Verbindungen des App-Pools, Standard `10` | Nein |
 | `MOLLIE_API_KEY` | Checkout und First Payment | Nein |
 | `SUBSCRIPTION_SESSION_SECRET` | Signiert die kurzlebige Workspace-Berechtigung | Nein |
 | `INTERNAL_TEST_ACCOUNTS` | Serverseitige Testkonten mit Passwort-Hash und festem Tarif | Nein |
@@ -106,6 +165,7 @@ npm run build
 | `TIKTOK_CLIENT_KEY`, `TIKTOK_CLIENT_SECRET` | ContentDock-App bei TikTok | Für TikTok-Connect |
 | `OAUTH_STATE_SECRET` | Signiert kurzlebige OAuth-Anfragen gegen Login-CSRF | Für Social Connect |
 | `SOCIAL_TOKEN_ENCRYPTION_KEY` | 32-Byte-Base64-Key für AES-256-GCM | Für Social Connect |
+| `WORKSPACE_DATA_ENCRYPTION_KEY` | Separater 32-Byte-Base64-Key für gespeicherte Workspace-Secrets wie SMTP | Für persistente Organisationen |
 
 Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals Werte aus `.env.local` committen.
 
@@ -139,7 +199,7 @@ https://<deine-domain>/api/connect/linkedin/callback
 https://<deine-domain>/api/connect/tiktok/callback
 ```
 
-Der Test-MVP speichert die Provider-Tokens ausschließlich in separaten, HTTP-only Cookies. Der gesamte Payload ist mit AES-256-GCM verschlüsselt; der Schlüssel bleibt serverseitig. Diese Variante ist für einen Vercel-Test und Einzelbenutzer gedacht. Vor Team-/Multi-Device-Betrieb wird derselbe Store gegen `social_connection` in PostgreSQL ausgetauscht, damit Token-Rotation, Widerruf und Audit-Logs zentral erfolgen.
+Demo-Verbindungen werden in separaten, HTTP-only Cookies gespeichert. Im angemeldeten Workspace schreibt derselbe Adapter den AES-256-GCM-verschlüsselten Payload in `social_connection`; dadurch bleiben Verbindungen bei Browser- und Gerätewechsel erhalten. React erhält in beiden Fällen nur Accountname, Scopes und Ablaufdatum.
 
 Die App-Credentials identifizieren ContentDock gegenüber dem Provider und werden einmalig vom Betreiber in Vercel hinterlegt. Nutzer geben ausschließlich im offiziellen Meta-, LinkedIn- oder TikTok-Dialog ihre Zustimmung. In der Demo fordert ContentDock nur Basis-/Identitäts-Scopes an. Nach dem Aboabschluss startet „Publishing freigeben“ eine zweite Autorisierung mit den jeweiligen Schreibrechten.
 
@@ -160,7 +220,8 @@ src/components/                  Landing-, Login- und Dashboard-Komponenten
 src/lib/integrations/            Provider-Verträge und Adapter
 src/lib/follower-audit.ts        Faire, erklärbare Review-Logik
 public/media/                    Optimierte, eigens erzeugte Demo-Assets
-database/schema.sql              Vorgesehenes Produktionsdatenmodell
+database/migrations/             Versioniertes PostgreSQL-Datenmodell
+scripts/migrate.mjs              Prüfsummengesicherter Migration-Runner
 docs/                            Architektur und Capability-Matrix
 .github/workflows/ci.yml         Typecheck, Lint und Build
 ```
@@ -168,11 +229,11 @@ docs/                            Architektur und Capability-Matrix
 ## Vom MVP zur Produktion
 
 - Identity Provider und serverseitige Session-Validierung anbinden
-- PostgreSQL-Schema migrieren, Abo-Lebenszyklus persistieren und Tenant-Isolation/RLS aktivieren
-- Verschlüsselten Test-Cookie-Store der Social Connectoren durch den PostgreSQL-Store mit KMS-gestützter Schlüsselrotation ersetzen
+- Vollständigen Abo-Lebenszyklus persistieren und Datenbank-Tenant-Isolation/RLS zusätzlich zur Server-Autorisierung aktivieren
+- KMS-gestützte Schlüsselrotation für verschlüsselte SMTP- und Provider-Tokens ergänzen
 - Objekt-Storage plus signierte Upload-URLs ergänzen
 - Durable Job Queue für geplante Veröffentlichungen und Retries einführen
-- OAuth Token verschlüsselt speichern und rotieren
+- OAuth-Tokenrotation und Widerruf automatisieren
 - Mollie-Webhooks idempotent persistieren; Subscription erst nach gültigem Mandat anlegen
 - Meta-/TikTok-App-Review und öffentliche Datenschutz-/Datenlöschungsseiten abschließen
 - Trendquellen, Datenlizenzierung und Nachvollziehbarkeit pro Signal vertraglich festlegen

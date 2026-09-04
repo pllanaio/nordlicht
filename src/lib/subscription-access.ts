@@ -13,6 +13,7 @@ export type SubscriptionEntitlement = {
   expiresAt: number;
   source: "mollie" | "internal-test";
   displayName?: string;
+  email?: string;
 };
 
 function getSigningSecret() {
@@ -48,6 +49,7 @@ export function createSubscriptionToken(input: {
   plan: PlanId;
   source?: SubscriptionEntitlement["source"];
   displayName?: string;
+  email?: string;
 }) {
   if (!isPlanId(input.plan)) throw new Error("Unknown subscription plan");
 
@@ -57,6 +59,7 @@ export function createSubscriptionToken(input: {
     expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     source: input.source ?? "mollie",
     displayName: input.displayName?.slice(0, 80),
+    email: input.email?.trim().toLocaleLowerCase("en-US").slice(0, 254),
   };
   const payload = Buffer.from(JSON.stringify(entitlement)).toString("base64url");
   const signature = sign(`entitlement:${payload}`);
@@ -80,7 +83,8 @@ function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null 
       typeof entitlement.expiresAt !== "number" ||
       entitlement.expiresAt <= Date.now() ||
       (source !== "mollie" && source !== "internal-test") ||
-      (entitlement.displayName !== undefined && typeof entitlement.displayName !== "string")
+      (entitlement.displayName !== undefined && typeof entitlement.displayName !== "string") ||
+      (entitlement.email !== undefined && typeof entitlement.email !== "string")
     ) {
       return null;
     }
@@ -90,6 +94,7 @@ function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null 
       expiresAt: entitlement.expiresAt,
       source,
       displayName: entitlement.displayName,
+      email: entitlement.email,
     };
   } catch {
     return null;

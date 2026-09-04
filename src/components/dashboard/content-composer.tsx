@@ -42,7 +42,7 @@ export function ContentComposer({
   const [apiKey, setApiKey] = useState("");
   const [caption, setCaption] = useState(demoCopy.caption);
   const [hashtags, setHashtags] = useState(demoCopy.hashtags);
-  const [date, setDate] = useState("2026-08-26");
+  const [date, setDate] = useState(() => mode === "demo" ? "2026-08-26" : new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("11:00");
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");

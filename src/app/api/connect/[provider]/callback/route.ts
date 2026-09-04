@@ -14,7 +14,7 @@ import {
 export const runtime = "nodejs";
 
 function appOrigin(request: NextRequest) {
-  const configuredOrigin = process.env.NEXT_PUBLIC_APP_URL;
+  const configuredOrigin = process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL;
   if (!configuredOrigin) return request.nextUrl.origin;
   try {
     return new URL(configuredOrigin).origin;
@@ -57,15 +57,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return connectorRedirect(request, oauthState.mode, providerParam, "invalid_state");
   }
 
+  let workspaceEntitlement = null;
   if (oauthState.mode === "demo") {
     const demoSessionId = await getDemoSessionId();
     if (!demoSessionId || oauthState.subject !== `demo:${demoSessionId}`) {
       return connectorRedirect(request, "demo", providerParam, "invalid_state");
     }
   } else {
-    const entitlement = await getSubscriptionEntitlement();
-    if (!entitlement) return NextResponse.redirect(new URL("/login?reason=subscription", appOrigin(request)));
-    if (oauthState.subject !== `subscription:${entitlement.paymentId}`) {
+    workspaceEntitlement = await getSubscriptionEntitlement();
+    if (!workspaceEntitlement) return NextResponse.redirect(new URL("/login?reason=subscription", appOrigin(request)));
+    if (oauthState.subject !== `subscription:${workspaceEntitlement.paymentId}`) {
       return connectorRedirect(request, "workspace", providerParam, "invalid_state");
     }
   }
@@ -80,7 +81,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const tokens = await provider.exchangeCode({ code, redirectUri, requestedScopes: oauthState.scopes });
     const profile = await provider.getProfile(tokens.accessToken);
-    await saveSocialConnection(providerParam, profile, tokens);
+    await saveSocialConnection(
+      providerParam,
+      profile,
+      tokens,
+      oauthState.mode === "demo" ? { mode: "demo" } : { mode: "workspace", entitlement: workspaceEntitlement! },
+    );
   } catch (error) {
     console.error(`OAuth callback failed for ${providerParam}`, error instanceof Error ? error.message : "Unknown error");
     return connectorRedirect(request, oauthState.mode, providerParam, "failed");

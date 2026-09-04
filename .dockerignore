@@ -1,0 +1,13 @@
+.git
+.github
+.next
+node_modules
+npm-debug.log*
+*.log
+.env*
+.vercel
+coverage
+build
+out
+generated_images
+README.md

@@ -1,0 +1,85 @@
+name: contentdock
+
+services:
+  app:
+    build:
+      context: .
+      target: runner
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 20s
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_TELEMETRY_DISABLED: "1"
+      APP_URL: "${APP_URL:-http://localhost:3000}"
+      PGHOST: database
+      PGPORT: "5432"
+      PGDATABASE: "${POSTGRES_DB:-contentdock}"
+      PGUSER: "${POSTGRES_APP_USER:-contentdock_app}"
+      PGPASSWORD: "${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env.docker}"
+      DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-10}"
+      SUBSCRIPTION_SESSION_SECRET: "${SUBSCRIPTION_SESSION_SECRET:-}"
+      INTERNAL_TEST_ACCOUNTS: "${INTERNAL_TEST_ACCOUNTS:-[]}"
+      MOLLIE_API_KEY: "${MOLLIE_API_KEY:-}"
+      MOLLIE_WEBHOOK_SECRET: "${MOLLIE_WEBHOOK_SECRET:-}"
+      META_APP_ID: "${META_APP_ID:-}"
+      META_APP_SECRET: "${META_APP_SECRET:-}"
+      META_GRAPH_VERSION: "${META_GRAPH_VERSION:-v23.0}"
+      META_GRAPH_HOST: "${META_GRAPH_HOST:-graph.instagram.com}"
+      LINKEDIN_CLIENT_ID: "${LINKEDIN_CLIENT_ID:-}"
+      LINKEDIN_CLIENT_SECRET: "${LINKEDIN_CLIENT_SECRET:-}"
+      TIKTOK_CLIENT_KEY: "${TIKTOK_CLIENT_KEY:-}"
+      TIKTOK_CLIENT_SECRET: "${TIKTOK_CLIENT_SECRET:-}"
+      OAUTH_STATE_SECRET: "${OAUTH_STATE_SECRET:-}"
+      SOCIAL_TOKEN_ENCRYPTION_KEY: "${SOCIAL_TOKEN_ENCRYPTION_KEY:-}"
+      WORKSPACE_DATA_ENCRYPTION_KEY: "${WORKSPACE_DATA_ENCRYPTION_KEY:-}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q '\"status\":\"healthy\"'"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  database:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-contentdock}"
+      POSTGRES_USER: "${POSTGRES_USER:-contentdock_owner}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}"
+      POSTGRES_APP_USER: "${POSTGRES_APP_USER:-contentdock_app}"
+      POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env.docker}"
+    volumes:
+      - contentdock_postgres_data:/var/lib/postgresql/data
+      - ./database/create-app-role.sh:/docker-entrypoint-initdb.d/001-create-app-role.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  migrate:
+    build:
+      context: .
+      target: runner
+    restart: "no"
+    environment:
+      NODE_ENV: production
+      PGHOST: database
+      PGPORT: "5432"
+      PGDATABASE: "${POSTGRES_DB:-contentdock}"
+      PGUSER: "${POSTGRES_USER:-contentdock_owner}"
+      PGPASSWORD: "${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env.docker}"
+    depends_on:
+      database:
+        condition: service_healthy
+    command: ["node", "scripts/migrate.mjs"]
+
+volumes:
+  contentdock_postgres_data:

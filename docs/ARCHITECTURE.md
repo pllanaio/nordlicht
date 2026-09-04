@@ -4,7 +4,9 @@
 
 - `/demo` ist öffentlich und interaktiv; nur Publish-Aufrufe bleiben gesperrt.
 - `/dashboard` prüft die Abo-Berechtigung in einer Server Component vor dem Rendern.
-- Mutierende Route Handler wie `/api/ai/caption` prüfen dieselbe Berechtigung erneut.
+- Mutierende Route Handler wie `/api/ai/caption` und `/api/workspace/*` prüfen dieselbe Berechtigung erneut.
+- Der Abo-Subject wird serverseitig einem stabilen `app_user`, `workspace` und `workspace_member` zugeordnet.
+- Demo-Zustand bleibt cookiebasiert und wird niemals in Mandantentabellen geschrieben.
 - Mollie-Redirects allein schalten nichts frei. `/api/mollie/confirm` lädt den autoritativen Zahlungsstatus und akzeptiert ausschließlich `paid`.
 - Die HTTP-only-Berechtigung ist HMAC-signiert und auf 24 Stunden begrenzt. Für Produktion wird sie durch eine Datenbank-Session ersetzt, deren Subscription-Status über idempotente Webhooks aktualisiert wird.
 
@@ -42,8 +44,8 @@ flowchart TD
 2. Ein providerbezogenes HTTP-only Cookie bindet den Wert an denselben Browser und verhindert Login-CSRF.
 3. Meta, LinkedIn oder TikTok authentifiziert den Nutzer und leitet nur einen einmaligen Authorization Code zurück.
 4. Der Callback prüft Flow-Modus, Session, Provider, Cookie und `state`, bevor der Code serverseitig gegen Tokens getauscht wird.
-5. Der Test-MVP verschlüsselt Tokens per AES-256-GCM in providerbezogenen HTTP-only Cookies. React erhält nur Accountname, Scopes und Ablaufdatum.
-6. Die Produktionsimplementierung schreibt denselben verschlüsselten Payload in `social_connection`; Browser-Cookies enthalten dann nur die normale Session-ID.
+5. Der Demo-Modus verschlüsselt Tokens per AES-256-GCM in providerbezogenen HTTP-only Cookies.
+6. Der Workspace-Modus schreibt denselben verschlüsselten Payload in `social_connection`; React erhält nur Accountname, Scopes und Ablaufdatum.
 
 Die Live-Demo führt reale OAuth-Requests mit minimalen Identitäts-Scopes aus. Publishing-Scopes werden erst im abonnementgeschützten Workspace nachgefordert. Client Secrets und Provider-Tokens werden weder an Client Components serialisiert noch in Logs geschrieben.
 
@@ -73,13 +75,13 @@ Jede Publication erhält einen idempotenten Schlüssel aus `content_item_id`, Pr
 
 ## Medien
 
-1. Client fordert eine signierte Upload-URL an.
-2. Datei wird direkt in EU-basierten Objekt-Storage geladen.
-3. Metadaten und Prüfsumme werden gespeichert.
-4. Asynchron: Virenscan, Transcoding, Thumbnail und technische Validierung.
-5. Nur geprüfte Assets dürfen Publication Jobs erzeugen.
+1. Die Demo erzeugt ausschließlich lokale Blob-Vorschauen.
+2. Der angemeldete Test-Workspace sendet Dateien an einen authentifizierten Route Handler.
+3. Dateityp, Anzahl und Größe werden begrenzt; Inhalt, Metadaten und SHA-256-Prüfsumme landen in `media_asset`.
+4. Für größere Produktionsvideos wird die Binärablage später auf S3-kompatiblen Objekt-Storage verschoben; PostgreSQL behält Metadaten und Prüfsummen.
+5. Vor echtem Publishing kommen Virenscan, Transcoding und technische Validierung hinzu.
 
-Der lokale MVP verwendet ausschließlich eine Browser-Vorschau und persistiert keine hochgeladene Datei.
+Die aktuelle PostgreSQL-Binärablage ist bewusst auf Testdateien bis 12 MB begrenzt und kein Ersatz für skalierbaren Video-Objektspeicher.
 
 ## BYOK-KI
 
@@ -112,6 +114,7 @@ Der MVP implementiert Customer + First Payment und den autoritativen Payment-Fet
 ## Deployment
 
 - Vercel Preview pro Pull Request
+- Docker Compose mit Next.js-Standalone-App, PostgreSQL und vorgeschaltetem Migration-Service
 - Produktions-Promotion erst nach Typecheck, Lint, Build und E2E-Kernflow
 - Secrets getrennt nach Development, Preview und Production
-- Datenbankmigration als expliziter, beobachtbarer Release-Schritt vor Promotion
+- Datenbankmigrationen laufen versions- und prüfsummengesichert unter Advisory Lock vor dem App-Start

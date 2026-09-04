@@ -9,7 +9,7 @@ export type MolliePayment = {
   id: string;
   status: string;
   customerId?: string;
-  metadata?: { plan?: string; customerId?: string };
+  metadata?: { plan?: string; customerId?: string; userEmail?: string; userName?: string };
   _links?: { checkout?: { href?: string } };
 };
 
@@ -52,7 +52,7 @@ export async function createFirstMolliePayment(input: {
       description: `ContentDock ${input.plan}`,
       redirectUrl: input.redirectUrl,
       webhookUrl: input.webhookUrl,
-      metadata: { plan: input.plan, customerId: customer.id },
+      metadata: { plan: input.plan, customerId: customer.id, userEmail: input.email, userName: input.name },
     }),
   });
   const checkoutUrl = payment._links?.checkout?.href;

@@ -3,13 +3,9 @@
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Check, Mail, UserRound, X } from "lucide-react";
+import type { UserProfile } from "@/lib/workspace-types";
 
-export type UserProfile = {
-  firstName: string;
-  lastName: string;
-  email: string;
-  avatarUrl: string;
-};
+export type { UserProfile } from "@/lib/workspace-types";
 
 export function ProfileDialog({ profile, onClose, onSave }: { profile: UserProfile; onClose: () => void; onSave: (profile: UserProfile, avatarFile?: File) => void }) {
   const [firstName, setFirstName] = useState(profile.firstName);

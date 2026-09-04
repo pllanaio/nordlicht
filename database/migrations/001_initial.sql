@@ -11,6 +11,10 @@ create table app_user (
   external_auth_id text not null unique,
   email text not null unique,
   display_name text not null,
+  first_name text not null,
+  last_name text not null,
+  avatar_data bytea,
+  avatar_content_type text,
   created_at timestamptz not null default now()
 );
 
@@ -19,6 +23,8 @@ create table workspace (
   name text not null,
   slug text not null unique,
   timezone text not null default 'Europe/Berlin',
+  configured boolean not null default true,
+  data_revision bigint not null default 0,
   created_at timestamptz not null default now()
 );
 
@@ -27,6 +33,29 @@ create table workspace_member (
   user_id uuid not null references app_user(id) on delete cascade,
   role membership_role not null,
   primary key (workspace_id, user_id)
+);
+
+create table workspace_invite (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references workspace(id) on delete cascade,
+  email text not null,
+  first_name text not null,
+  last_name text not null,
+  role membership_role not null,
+  status text not null default 'invited' check (status in ('invited', 'active')),
+  created_at timestamptz not null default now(),
+  unique (workspace_id, email)
+);
+
+create table workspace_smtp_settings (
+  workspace_id uuid primary key references workspace(id) on delete cascade,
+  host text not null,
+  port integer not null check (port between 1 and 65535),
+  username text not null,
+  encrypted_password bytea not null,
+  from_email text not null,
+  encryption text not null check (encryption in ('STARTTLS', 'SSL/TLS')),
+  updated_at timestamptz not null default now()
 );
 
 create table subscription (
@@ -57,14 +86,16 @@ create table social_connection (
   last_verified_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  unique (workspace_id, provider, provider_account_id)
+  unique (workspace_id, provider)
 );
 
 create table media_asset (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references workspace(id) on delete cascade,
   storage_key text not null unique,
+  name text not null,
   content_type text not null,
+  content bytea,
   bytes bigint not null check (bytes > 0),
   checksum_sha256 text not null,
   width integer,
@@ -81,6 +112,8 @@ create table content_item (
   title text not null,
   caption text not null default '',
   hashtags text[] not null default '{}',
+  channel text not null check (channel in ('Instagram', 'TikTok', 'LinkedIn', 'YouTube')),
+  image_url text not null default '/media/design-studio.webp',
   status content_status not null default 'draft',
   asset_id uuid references media_asset(id),
   created_by uuid not null references app_user(id),
@@ -142,5 +175,18 @@ create table audience_review (
 );
 
 create index content_item_workspace_schedule_idx on content_item(workspace_id, scheduled_at);
+create index workspace_member_user_idx on workspace_member(user_id);
+create index workspace_invite_workspace_idx on workspace_invite(workspace_id);
+create index media_asset_workspace_created_idx on media_asset(workspace_id, created_at desc);
+create index media_asset_created_by_idx on media_asset(created_by);
+create index content_item_asset_idx on content_item(asset_id) where asset_id is not null;
+create index content_item_created_by_idx on content_item(created_by);
+create index content_item_approved_by_idx on content_item(approved_by) where approved_by is not null;
+create index publication_workspace_idx on publication(workspace_id);
+create index publication_content_item_idx on publication(content_item_id);
+create index publication_connection_idx on publication(connection_id);
 create index publication_due_idx on publication(status, scheduled_at) where status in ('queued', 'retry');
 create index reminder_due_idx on reminder(workspace_id, due_at) where acknowledged_at is null;
+create index reminder_content_item_idx on reminder(content_item_id) where content_item_id is not null;
+create index trend_signal_workspace_window_idx on trend_signal(workspace_id, window_end desc);
+create index audience_review_decided_by_idx on audience_review(decided_by) where decided_by is not null;

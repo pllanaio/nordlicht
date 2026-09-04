@@ -2,33 +2,9 @@
 
 import { useState } from "react";
 import { Building2, CheckCircle2, Server, ShieldCheck, Trash2, UserPlus, UsersRound } from "lucide-react";
+import type { Organization, OrganizationMember, OrganizationRole, SmtpSettings } from "@/lib/workspace-types";
 
-export type OrganizationRole = "Administrator" | "Manager";
-
-export type OrganizationMember = {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  role: OrganizationRole;
-  status: "Aktiv" | "Eingeladen";
-};
-
-export type SmtpSettings = {
-  host: string;
-  port: string;
-  username: string;
-  password: string;
-  fromEmail: string;
-  encryption: "STARTTLS" | "SSL/TLS";
-};
-
-export type Organization = {
-  id: string;
-  name: string;
-  members: OrganizationMember[];
-  smtp: SmtpSettings;
-};
+export type { Organization, OrganizationMember, OrganizationRole, SmtpSettings } from "@/lib/workspace-types";
 
 const emptySmtp: SmtpSettings = { host: "", port: "587", username: "", password: "", fromEmail: "", encryption: "STARTTLS" };
 
@@ -49,6 +25,7 @@ export function OrganizationManager({
   onDelete,
   onToast,
   currentUser,
+  onBeforeInvite,
 }: {
   organization: Organization | null;
   demo: boolean;
@@ -56,6 +33,7 @@ export function OrganizationManager({
   onDelete: () => void;
   onToast: (message: string) => void;
   currentUser: { firstName: string; lastName: string; email: string };
+  onBeforeInvite?: () => Promise<void>;
 }) {
   const [organizationName, setOrganizationName] = useState("");
   const [firstName, setFirstName] = useState("");
@@ -100,7 +78,8 @@ export function OrganizationManager({
     setSendingInvite(true);
     try {
       if (!demo) {
-        const response = await fetch("/api/organization/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ organizationName: organization.name, member, smtp: organization.smtp }) });
+        await onBeforeInvite?.();
+        const response = await fetch("/api/organization/invite", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ organizationName: organization.name, member }) });
         const result = (await response.json()) as { sent?: boolean; error?: string };
         if (!response.ok || !result.sent) throw new Error(result.error ?? "Die Einladung konnte nicht versendet werden.");
       } else {
@@ -145,7 +124,7 @@ export function OrganizationManager({
     return (
       <section className="organization-empty">
         <span><Building2 aria-hidden="true" /></span>
-        <div><span className="feature-kicker">Neuer Workspace</span><h2>Organisation von Grund auf anlegen</h2><p>Die Demo-Organisation und ihre lokalen Inhalte wurden entfernt. Lege jetzt einen leeren Workspace an.</p></div>
+        <div><span className="feature-kicker">Neuer Workspace</span><h2>Organisation von Grund auf anlegen</h2><p>{demo ? "Die Demo-Organisation und ihre lokalen Inhalte wurden entfernt." : "Die bisherige Organisation und ihre Workspace-Daten wurden entfernt."} Lege jetzt einen leeren Workspace an.</p></div>
         <form onSubmit={createOrganization}><label className="composer-field">Name der Organisation<input value={organizationName} onChange={(event) => setOrganizationName(event.target.value)} placeholder="z. B. Nordlicht Media GmbH" required /></label><button className="button" type="submit" disabled={!organizationName.trim()}>Organisation anlegen</button></form>
       </section>
     );
@@ -180,7 +159,7 @@ export function OrganizationManager({
       </section>
 
       <section className="smtp-settings">
-        <header><div><span className="feature-kicker">Einladungsversand</span><h2>SMTP-Zugang hinterlegen</h2><p>{demo ? "Tech-Demo: Zugangsdaten bleiben nur in dieser Sitzung; es wird keine echte E-Mail gesendet." : "SMTP-Secrets müssen produktiv verschlüsselt serverseitig gespeichert werden."}</p></div><Server aria-hidden="true" /></header>
+        <header><div><span className="feature-kicker">Einladungsversand</span><h2>SMTP-Zugang hinterlegen</h2><p>{demo ? "Tech-Demo: Zugangsdaten bleiben nur in dieser Sitzung; es wird keine echte E-Mail gesendet." : "Das SMTP-Passwort wird verschlüsselt im Workspace gespeichert und bei Einladungen nicht wieder an den Browser übertragen."}</p></div><Server aria-hidden="true" /></header>
         <div className="smtp-settings__grid">
           <label className="composer-field">SMTP-Host<input value={organization.smtp.host} onChange={(event) => updateSmtp("host", event.target.value)} placeholder="smtp.example.com" disabled={!canAdminister} /></label>
           <label className="composer-field">Port<input inputMode="numeric" value={organization.smtp.port} onChange={(event) => updateSmtp("port", event.target.value)} disabled={!canAdminister} /></label>

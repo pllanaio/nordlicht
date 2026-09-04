@@ -1,12 +1,13 @@
 import "server-only";
 
 import type { SocialConnectorCard } from "./contracts";
+import type { SubscriptionEntitlement } from "@/lib/subscription-access";
 import { isOAuthStateConfigured } from "./oauth-state";
 import { getSocialConnectionSummaries, isSocialConnectionStoreConfigured } from "./social-connection-store";
 import { getSocialOAuthProvider, getSocialPublishingScopes, socialProviderIds } from "./social-oauth";
 
-export async function getSocialConnectorCards(): Promise<SocialConnectorCard[]> {
-  const connections = await getSocialConnectionSummaries(socialProviderIds);
+export async function getSocialConnectorCards(storage: { mode: "demo" } | { mode: "workspace"; entitlement: SubscriptionEntitlement }): Promise<SocialConnectorCard[]> {
+  const connections = await getSocialConnectionSummaries(socialProviderIds, storage);
   const secureFlowConfigured = isOAuthStateConfigured() && isSocialConnectionStoreConfigured();
 
   return socialProviderIds.map((providerId) => {

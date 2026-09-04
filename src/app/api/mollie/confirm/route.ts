@@ -24,7 +24,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Der Zahlungsplan konnte nicht zugeordnet werden." }, { status: 422 });
     }
 
-    const token = createSubscriptionToken({ paymentId: payment.id, plan });
+    const token = createSubscriptionToken({
+      paymentId: payment.id,
+      plan,
+      displayName: payment.metadata?.userName,
+      email: payment.metadata?.userEmail,
+    });
     (await cookies()).set(subscriptionCookieName, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

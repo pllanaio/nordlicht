@@ -3,16 +3,9 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { Eye, FileVideo, ImageIcon, Search, Upload, X } from "lucide-react";
+import type { MediaAsset } from "@/lib/workspace-types";
 
-export type MediaAsset = {
-  id: string;
-  name: string;
-  kind: "image" | "video";
-  preview: string;
-  size: number;
-  uploadedAt: string;
-  uploadedInSession?: boolean;
-};
+export type { MediaAsset } from "@/lib/workspace-types";
 
 export const initialMediaAssets: MediaAsset[] = [
   { id: "media-alpine", name: "Alpine Campaign", kind: "image", preview: "/media/alpine-lake.webp", size: 2_840_000, uploadedAt: "24.08.2026" },
@@ -35,7 +28,7 @@ function AssetPreview({ asset, fill = false }: { asset: MediaAsset; fill?: boole
     : <Image src={asset.preview} alt={asset.name} width={620} height={420} unoptimized={asset.preview.startsWith("blob:")} sizes="(max-width: 720px) 90vw, 620px" />;
 }
 
-export function MediaLibrary({ assets, onUpload }: { assets: MediaAsset[]; onUpload: (files: File[]) => void }) {
+export function MediaLibrary({ assets, onUpload, persistent = false }: { assets: MediaAsset[]; onUpload: (files: File[]) => void; persistent?: boolean }) {
   const [filter, setFilter] = useState<"all" | "image" | "video">("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -63,7 +56,7 @@ export function MediaLibrary({ assets, onUpload }: { assets: MediaAsset[]; onUpl
         <label className="button media-library__upload"><Upload aria-hidden="true" /> Material hochladen<input type="file" accept="image/*,video/*" multiple onChange={selectFiles} /></label>
       </div>
 
-      <div className="media-library__summary"><span><strong>{visibleAssets.length}</strong> Dateien sichtbar</span><span>Demo-Speicher · Uploads bleiben bis zum Neuladen erhalten</span></div>
+      <div className="media-library__summary"><span><strong>{visibleAssets.length}</strong> Dateien sichtbar</span><span>{persistent ? "Workspace-Speicher · Uploads werden dauerhaft gespeichert" : "Demo-Speicher · Uploads bleiben bis zum Neuladen erhalten"}</span></div>
 
       {visibleAssets.length ? (
         <div className="media-library__grid">
