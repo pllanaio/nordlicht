@@ -96,6 +96,8 @@ npm run build
 
 Der Compose-Stack startet die produktive Next.js-Standalone-Anwendung zusammen mit PostgreSQL 16. Die Datenbank ist nur im internen Compose-Netz erreichbar, wird über ein benanntes Volume persistiert und vor jedem App-Start über den einmaligen `migrate`-Service aktualisiert.
 
+Die Next.js-Konfiguration aktiviert `output: "standalone"` nur außerhalb von Vercel. Dadurch erhält Docker weiterhin das eigenständige Server-Artefakt, während Vercel die Serverless Functions über seinen nativen Build-Prozess paketiert.
+
 ```bash
 cp .env.docker.example .env.docker
 docker compose --env-file .env.docker build app
