@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   ArrowRight,
   Bell,
@@ -13,6 +13,7 @@ import {
   ChevronRight,
   CircleAlert,
   CircleDollarSign,
+  Clapperboard,
   ExternalLink,
   FileImage,
   Home,
@@ -35,10 +36,14 @@ import {
   UsersRound,
   WandSparkles,
   X,
+  Youtube,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { DashboardDialog, useModalInteraction } from "@/components/dashboard/dashboard-dialog";
 import { ContentComposer } from "@/components/dashboard/content-composer";
 import { AiStudio } from "@/components/dashboard/ai-studio";
+import { VideoStudio } from "@/components/dashboard/video-studio";
 import { initialMediaAssets, MediaLibrary } from "@/components/dashboard/media-library";
 import { initialOrganization, OrganizationManager } from "@/components/dashboard/organization-manager";
 import { ProfileDialog } from "@/components/dashboard/profile-dialog";
@@ -50,7 +55,7 @@ import type { SocialConnectorCard, SocialProviderId } from "@/lib/integrations/c
 import { minimumPlanFor, planCatalog, planIds, planIncludes, type PlanFeature, type PlanId } from "@/lib/plans";
 import type { MediaAsset, Organization, UserProfile, WorkspaceDashboardData } from "@/lib/workspace-types";
 
-export type DashboardView = "Übersicht" | "Kalender" | "Freigaben" | "Organisation" | "Mediathek" | "KI-Studio" | "Trends" | "Integrationen" | "Abrechnung";
+export type DashboardView = "Übersicht" | "Kalender" | "Freigaben" | "Organisation" | "Mediathek" | "KI-Studio" | "Video-Studio" | "Trends" | "Integrationen" | "Abrechnung";
 
 type ConnectorFeedback = { provider?: string; status: string };
 
@@ -61,12 +66,20 @@ const navItems: Array<{ name: DashboardView; icon: typeof Home; feature?: PlanFe
   { name: "Organisation", icon: Building2, feature: "team_approvals" },
   { name: "Mediathek", icon: ImageIcon },
   { name: "KI-Studio", icon: WandSparkles },
+  { name: "Video-Studio", icon: Clapperboard },
   { name: "Trends", icon: TrendingUp },
   { name: "Integrationen", icon: Plug },
   { name: "Abrechnung", icon: CircleDollarSign },
 ];
 
-const managerViews = new Set<DashboardView>(["Übersicht", "Kalender", "Freigaben", "Mediathek", "KI-Studio", "Trends"]);
+const managerViews = new Set<DashboardView>(["Übersicht", "Kalender", "Freigaben", "Mediathek", "KI-Studio", "Video-Studio", "Trends"]);
+const viewQueries: Record<DashboardView, string> = { Übersicht: "", Kalender: "kalender", Freigaben: "freigaben", Organisation: "organisation", Mediathek: "mediathek", "KI-Studio": "ki-studio", "Video-Studio": "video-studio", Trends: "trends", Integrationen: "integrations", Abrechnung: "abrechnung" };
+const mobileNavigationQuery = "(max-width: 720px)";
+function subscribeMobileNavigation(callback: () => void) {
+  const media = window.matchMedia(mobileNavigationQuery);
+  media.addEventListener("change", callback);
+  return () => media.removeEventListener("change", callback);
+}
 const demoCookieNames = {
   items: "contentdock_demo_items_v1",
   organization: "contentdock_demo_organization_v1",
@@ -177,12 +190,6 @@ type LiveNotice = {
   itemId?: string;
 };
 
-function scheduleSlotTop(time: string) {
-  const [hours, minutes] = time.split(":").map(Number);
-  const minuteOfDay = (hours * 60) + minutes;
-  return Math.max(10, Math.min(286, 14 + ((minuteOfDay - 540) / 720) * 280));
-}
-
 function ChannelIcon({ channel }: { channel: Channel }) {
   if (channel === "LinkedIn") return <Linkedin aria-hidden="true" size={15} />;
   return <span aria-hidden="true">{channel === "Instagram" ? "◎" : channel === "TikTok" ? "♪" : "▶"}</span>;
@@ -191,7 +198,7 @@ function ChannelIcon({ channel }: { channel: Channel }) {
 function ScheduleCard({ item, onOpen }: { item: ScheduleItem; onOpen: (id: string) => void }) {
   return (
     <button className="schedule-card" type="button" onClick={() => onOpen(item.id)} aria-label={`${item.title}, ${formatCalendarMoment(item.date, item.time)} – Details bearbeiten`}>
-      <Image src={item.image} alt="" width={72} height={62} sizes="72px" />
+      {item.image ? <Image unoptimized={item.image.startsWith("/api/") || item.image.startsWith("blob:")} src={item.image} alt="" width={72} height={62} sizes="72px" /> : <span className="media-placeholder"><FileImage aria-hidden="true" /></span>}
       <div>
         <small><span className={`channel-icon channel-icon--${channelClass[item.channel]}`}><ChannelIcon channel={item.channel} /></span>{item.time} Uhr</small>
         <strong>{item.title}</strong>
@@ -230,20 +237,23 @@ function WeekPlanner({
         </div>
       </div>
       <div className="week-planner__days">
-        <div className="week-planner__time-space" />
         {days.map((day) => (
-          <button className={day.date === focusDate ? "is-selected" : ""} type="button" onClick={() => onSelectDay(day.date)} aria-label={`${day.short}, ${day.day}. auswählen`} key={day.date}><span>{day.short}</span><strong>{day.day}</strong></button>
+          <button className={day.date === focusDate ? "is-selected" : ""} aria-pressed={day.date === focusDate} type="button" onClick={() => onSelectDay(day.date)} aria-label={`${day.short}, ${day.day}. auswählen`} key={day.date}><span>{day.short}</span><strong>{day.day}</strong></button>
         ))}
       </div>
+      <div className="week-planner__agenda">
+        {days.map((day) => {
+          const dayItems = items.filter((item) => item.date === day.date).toSorted((a, b) => a.time.localeCompare(b.time));
+          return <section key={day.date}><h3>{new Intl.DateTimeFormat("de-DE", { weekday: "long", day: "numeric", month: "long" }).format(parseCalendarDate(day.date))}</h3>{dayItems.length ? dayItems.map((item) => <ScheduleCard key={item.id} item={item} onOpen={onOpenItem} />) : <p className="agenda-empty">Keine Beiträge geplant</p>}</section>;
+        })}
+      </div>
       <div className="week-planner__body">
-        <div className="week-planner__times"><span>09:00</span><span>12:00</span><span>15:00</span><span>18:00</span><span>21:00</span></div>
         <div className="week-planner__columns">
           {days.map((day) => (
             <div className={`week-column${day.date === focusDate ? " is-selected" : ""}`} onClick={() => onSelectDay(day.date)} key={day.date}>
-              {items.filter((item) => item.date === day.date).map((item) => (
-                <div className="schedule-slot" style={{ top: scheduleSlotTop(item.time) }} key={item.id}><ScheduleCard item={item} onOpen={onOpenItem} /></div>
+              {items.filter((item) => item.date === day.date).toSorted((a, b) => a.time.localeCompare(b.time)).map((item) => (
+                <div className="schedule-slot" key={item.id}><ScheduleCard item={item} onOpen={onOpenItem} /></div>
               ))}
-              {day.date === focusDate ? <div className="current-time" aria-label="Ausgewählter Tag"><span /></div> : null}
             </div>
           ))}
         </div>
@@ -265,6 +275,7 @@ function Overview({
   onSelectDay,
   onOpenTrends,
   onOpenIntegrations,
+  onOpenVideoStudio,
   connectors,
   notices,
   unfinishedItems,
@@ -283,6 +294,7 @@ function Overview({
   onSelectDay: (date: string) => void;
   onOpenTrends: () => void;
   onOpenIntegrations: () => void;
+  onOpenVideoStudio: () => void;
   connectors: SocialConnectorCard[];
   notices: LiveNotice[];
   unfinishedItems: ScheduleItem[];
@@ -293,14 +305,15 @@ function Overview({
   const channels: Array<{ channel: Channel; provider?: SocialProviderId }> = [
     { channel: "Instagram", provider: "instagram" },
     { channel: "TikTok", provider: "tiktok" },
+    { channel: "YouTube", provider: "youtube" },
     { channel: "LinkedIn", provider: "linkedin" },
   ];
 
   return (
     <>
       <header className="dashboard-heading">
-        <div><h1>{demo ? "Live-Demo: Nordlicht Studio" : `Guten Morgen, ${displayName}.`}</h1><p>{demo ? "Erstelle und plane Content – nur das Veröffentlichen bleibt gesperrt." : "Dein Content für diese Woche ist fast bereit."}</p></div>
-        <button className="button dashboard-heading__button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
+        <div><h1>{demo ? "Dein Überblick · Demo" : `Hallo, ${displayName}.`}</h1><p>{demo ? "Entdecke ContentDock mit Beispieldaten. Es wird nichts veröffentlicht." : `${items.length} ${items.length === 1 ? "Beitrag" : "Beiträge"} in deinem Kalender. Hier geht es mit deinen Ideen weiter.`}</p></div>
+        <button className="button dashboard-heading__button" onClick={onOpenVideoStudio}>Video erstellen <Clapperboard size={17} aria-hidden="true" /></button>
       </header>
       <div className="dashboard-grid">
         <div className="dashboard-grid__main">
@@ -308,7 +321,7 @@ function Overview({
           <div className="dashboard-lower">
             <section className="channel-table">
               <h2>Kanäle</h2>
-              <div className="channel-table__labels"><span>Kanal</span><span>Status</span><span>Nächste Veröffentlichung</span></div>
+              <div className="channel-table__labels"><span>Kanal</span><span>Status</span><span>Nächster Wunschtermin</span></div>
               {channels.map(({ channel, provider }) => {
                 const connector = connectors.find((candidate) => candidate.provider === provider);
                 const connected = Boolean(connector?.connection);
@@ -336,21 +349,21 @@ function Overview({
             {nextItem ? <>
               <span className="next-step__type">{contentTypeLabel(nextItem.channel)}</span>
               <h3>{contentTypeLabel(nextItem.channel)} finalisieren</h3>
-              <p>{nextItem.status === "Freigabe" ? "Prüfe den Beitrag und plane ihn final ein." : "Vervollständige den Entwurf und übergib ihn ins Review."}</p>
-              <div className="progress-steps"><span className={nextItem.status !== "Entwurf" ? "is-done" : "is-active"}>1<small>Bearbeiten</small></span><span className={nextItem.status === "Freigabe" ? "is-active" : ""}>2<small>Review</small></span><span>3<small>Planen</small></span></div>
+              <p>{nextItem.status === "Freigabe" ? "Prüfe den Beitrag und lege seinen Wunschtermin fest." : "Vervollständige den Entwurf und gib ihn zur Prüfung frei."}</p>
+              <div className="progress-steps"><span className={nextItem.status !== "Entwurf" ? "is-done" : "is-active"}>1<small>Bearbeiten</small></span><span className={nextItem.status === "Freigabe" ? "is-active" : ""}>2<small>Prüfen</small></span><span>3<small>Planen</small></span></div>
               <div className="next-step__media">
-                <Image src={nextItem.image} alt={`Vorschau für ${nextItem.title}`} width={92} height={128} sizes="92px" />
-                <div><strong>{nextItem.title}</strong><p>{nextItem.caption || "Noch keine Caption hinterlegt."}</p><small>{formatCalendarMoment(nextItem.date, nextItem.time)}</small></div>
+                {nextItem.image ? <Image unoptimized={nextItem.image.startsWith("/api/") || nextItem.image.startsWith("blob:")} src={nextItem.image} alt="" width={92} height={128} sizes="92px" /> : <span className="media-placeholder"><FileImage aria-hidden="true" /> Ohne Bild</span>}
+                <div><strong>{nextItem.title}</strong><p>{nextItem.caption || "Noch kein Beitragstext hinterlegt."}</p><small>{formatCalendarMoment(nextItem.date, nextItem.time)}</small></div>
               </div>
               <button className="button" type="button" onClick={() => onOpenItem(nextItem.id)}>Bearbeiten & fertigstellen <ArrowRight size={17} aria-hidden="true" /></button>
-            </> : <div className="next-step__empty"><CheckCircle2 aria-hidden="true" /><h3>Alles fertiggestellt</h3><p>Es gibt aktuell keine Entwürfe oder offenen Freigaben.</p><button className="button" onClick={onCreate}>Neuen Content erstellen <Plus size={16} /></button></div>}
+            </> : <div className="next-step__empty"><CheckCircle2 aria-hidden="true" /><h3>Alles fertiggestellt</h3><p>Es gibt aktuell keine Entwürfe oder offenen Freigaben.</p><button className="button" onClick={onCreate}>Neuen Beitrag erstellen <Plus size={16} /></button></div>}
           </section>
           <section className="trend-radar">
             <div className="panel-title"><h2>Trendradar</h2><TrendingUp size={18} aria-hidden="true" /></div>
             <div className="trend-radar__signal">
               <TrendingUp aria-hidden="true" />
-              <div><strong>Behind-the-scenes Formate gewinnen an Tempo</strong><p>Mehr Marken setzen auf authentische Einblicke. Engagement steigt.</p></div>
-              <button type="button" onClick={onOpenTrends}>Analyse öffnen <ArrowRight size={15} aria-hidden="true" /></button>
+              <div><strong>Neue Ideen für deinen nächsten Beitrag</strong><p>Entdecke Themen für deine Branche und prüfe die Quellen.</p></div>
+              <button type="button" onClick={onOpenTrends}>Themen entdecken <ArrowRight size={15} aria-hidden="true" /></button>
             </div>
           </section>
         </aside>
@@ -363,6 +376,7 @@ const socialProviderIcons: Record<SocialProviderId, typeof Instagram> = {
   instagram: Instagram,
   linkedin: Linkedin,
   tiktok: Music2,
+  youtube: Youtube,
 };
 
 function IntegrationsView({
@@ -376,11 +390,11 @@ function IntegrationsView({
     <div className="integrations-panel">
       <div className="integrations-panel__intro">
         <div>
-          <span className="feature-kicker">Social Publishing</span>
-          <h2>Deine Accounts. Sicher verbunden.</h2>
-          <p>ContentDock erhält nur die freigegebenen OAuth-Berechtigungen. Deine Plattform-Passwörter bleiben immer beim jeweiligen Anbieter.</p>
+          <span className="feature-kicker">Social-Media-Konten</span>
+          <h2>Deine Kanäle verbinden</h2>
+          <p>Du meldest dich direkt bei der Plattform an und entscheidest, welche Zugriffe du ContentDock erlaubst.</p>
         </div>
-        <span className="integrations-panel__security"><ShieldCheck aria-hidden="true" /> OAuth 2.0 · verschlüsselte Tokens</span>
+        <span className="integrations-panel__security"><ShieldCheck aria-hidden="true" /> Geschützte Verbindung</span>
       </div>
 
       <div className="social-connector-grid">
@@ -392,7 +406,7 @@ function IntegrationsView({
               <div className="social-connector__head">
                 <span className="social-connector__icon"><Icon aria-hidden="true" /></span>
                 <span className={`social-connector__status ${connected ? "is-connected" : connector.configured ? "is-ready" : "is-missing"}`}>
-                  {connected ? <><i /> Verbunden</> : connector.configured ? "Bereit" : "Konfiguration fehlt"}
+                  {connected ? <><i /> Verbunden</> : connector.configured ? "Bereit" : "Noch nicht verfügbar"}
                 </span>
               </div>
               <h3>{connector.label}</h3>
@@ -400,12 +414,12 @@ function IntegrationsView({
               {connector.connection ? (
                 <div className="social-connector__account">
                   <span>{connector.connection.displayName.slice(0, 1).toLocaleUpperCase("de")}</span>
-                  <div><strong>{connector.connection.displayName}</strong><small>{connector.publishingReady ? "Publishing freigegeben" : "Account erfolgreich hinterlegt"}</small></div>
+                  <div><strong>{connector.connection.displayName}</strong><small>{connector.publishingReady ? "Veröffentlichung freigegeben" : "Konto verbunden"}</small></div>
                 </div>
               ) : (
                 <div className="social-connector__notice">
                   {connector.configured ? <Link2 aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
-                  <span>{connector.configured ? "Bereit für den offiziellen Login-Dialog." : demo ? "Dieser Connector wird aktuell eingerichtet." : "App-ID, Secret und Token-Schlüssel in Vercel hinterlegen."}</span>
+                  <span>{connector.configured ? "Melde dich direkt bei der Plattform an." : demo ? "Dieser Kanal ist noch nicht verfügbar." : "Dieser Kanal wurde für ContentDock noch nicht eingerichtet."}</span>
                 </div>
               )}
               <div className="social-connector__actions">
@@ -414,7 +428,7 @@ function IntegrationsView({
                     <button className="secondary-button" type="submit"><Unplug size={15} aria-hidden="true" /> Verbindung trennen</button>
                   </form>
                 ) : connector.connection && !connector.publishingReady ? (
-                  <a className="button" href={`/api/connect/${connector.provider}/start`}>Publishing freigeben <ArrowRight size={15} aria-hidden="true" /></a>
+                  <a className="button" href={`/api/connect/${connector.provider}/start`}>Veröffentlichung erlauben <ArrowRight size={15} aria-hidden="true" /></a>
                 ) : connector.connection ? (
                   <form action={`/api/connect/${connector.provider}/disconnect`} method="post">
                     <button className="secondary-button" type="submit"><Unplug size={15} aria-hidden="true" /> Trennen</button>
@@ -422,7 +436,7 @@ function IntegrationsView({
                 ) : connector.configured ? (
                   <a className="button" href={`/api/connect/${connector.provider}/start${demo ? "?mode=demo" : ""}`}>Mit {connector.label} verbinden <ArrowRight size={15} aria-hidden="true" /></a>
                 ) : (
-                  <span className="social-connector__disabled">Noch nicht konfiguriert</span>
+                  <span className="social-connector__disabled">Verbindung noch nicht verfügbar</span>
                 )}
                 <a className="social-connector__docs" href={connector.docsUrl} target="_blank" rel="noreferrer" aria-label={`${connector.label} Dokumentation öffnen`}><ExternalLink aria-hidden="true" /></a>
               </div>
@@ -431,31 +445,31 @@ function IntegrationsView({
         })}
       </div>
 
-      {demo ? <p className="integrations-panel__paywall"><LockKeyhole aria-hidden="true" /> Account-Verbindung, Content-Erstellung und Planung funktionieren in der Demo. Erst die tatsächliche Veröffentlichung benötigt ein aktives Abo und zusätzliche Publishing-Freigaben.</p> : null}
+      {demo ? <p className="integrations-panel__paywall"><LockKeyhole aria-hidden="true" /> In der Demo kannst du die Oberfläche ausprobieren. Veröffentlichungen sind erst im gebuchten Arbeitsbereich mit verbundenem Konto möglich.</p> : null}
 
       <section className="connector-architecture">
         <div><span>1</span><strong>Verbinden</strong><small>Offizieller Login beim Anbieter</small></div>
         <ArrowRight aria-hidden="true" />
         <div><span>2</span><strong>Freigeben</strong><small>Nur benötigte Berechtigungen</small></div>
         <ArrowRight aria-hidden="true" />
-        <div><span>3</span><strong>Automatisieren</strong><small>Planen, prüfen und veröffentlichen</small></div>
+        <div><span>3</span><strong>Veröffentlichen</strong><small>Fertige Videos prüfen und veröffentlichen</small></div>
       </section>
 
     </div>
   );
 }
 
-function LockedFeature({ plan, feature }: { plan: PlanId; feature: PlanFeature }) {
+function LockedFeature({ feature, internalTest }: { plan: PlanId; feature: PlanFeature; internalTest: boolean }) {
   const requiredPlan = minimumPlanFor(feature);
   const featureLabel = feature === "team_approvals" ? "Teamfreigaben" : "Trendradar";
   return (
     <div className="feature-view__locked">
       <span><LockKeyhole aria-hidden="true" /></span>
       <div>
-        <span className="feature-kicker">In deinem Testtarif gesperrt</span>
+        <span className="feature-kicker">Im höheren Tarif enthalten</span>
         <h2>{featureLabel} ist ein {planCatalog[requiredPlan].label}-Feature.</h2>
-        <p>Du testest gerade {planCatalog[plan].label}. Melde dich mit einem {planCatalog[requiredPlan].label}-Testkonto{requiredPlan === "studio" ? " oder Pro-Testkonto" : ""} an, um diesen Bereich zu prüfen.</p>
-        <Link className="button" href="/login">Anderes Testkonto verwenden <ArrowRight size={16} aria-hidden="true" /></Link>
+        <p>{internalTest ? "Wähle ein passendes Testkonto, um die Teamfunktionen zu testen." : "Für die Zusammenarbeit mit deinem Team brauchst du einen Tarif mit Teamfreigaben."}</p>
+        <Link className="button" href={internalTest ? "/login" : "/#preise"}>{internalTest ? "Testkonto wechseln" : "Tarife ansehen"} <ArrowRight size={16} aria-hidden="true" /></Link>
       </div>
     </div>
   );
@@ -474,7 +488,7 @@ function BillingView({ plan, internalTest }: { plan: PlanId; internalTest: boole
         {internalTest ? <p className="plan-overview__test"><ShieldCheck aria-hidden="true" /> Interne Abo-Simulation – keine Abbuchung und keine Rechnung.</p> : null}
       </section>
       <section className="plan-overview__matrix" aria-labelledby="plan-matrix-title">
-        <div><span className="feature-kicker">Stufentest</span><h2 id="plan-matrix-title">Feature-Zugriff je Tarif</h2></div>
+        <div><span className="feature-kicker">Tarifvergleich</span><h2 id="plan-matrix-title">Das ist in deinem Tarif enthalten</h2></div>
         <div className="plan-overview__plans">
           {planIds.map((planId) => (
             <article className={planId === plan ? "is-current" : ""} key={planId}>
@@ -500,6 +514,7 @@ function FeatureView({
   onSelectDay,
   mediaAssets,
   onMediaUpload,
+  onVideoAssetCreated,
   demo,
   connectors,
   plan,
@@ -524,6 +539,7 @@ function FeatureView({
   onSelectDay: (date: string) => void;
   mediaAssets: MediaAsset[];
   onMediaUpload: (files: File[]) => void;
+  onVideoAssetCreated: (asset: MediaAsset) => void;
   demo: boolean;
   connectors: SocialConnectorCard[];
   plan: PlanId;
@@ -540,12 +556,13 @@ function FeatureView({
   const featureCopy: Record<Exclude<DashboardView, "Übersicht">, { title: string; text: string; icon: typeof Home }> = {
     Kalender: { title: "Content-Kalender", text: "Plane Beiträge kanalübergreifend und behalte Freigaben im Blick.", icon: CalendarDays },
     Freigaben: { title: "Teamfreigaben", text: "Prüfe Inhalte gemeinsam, sammle Feedback und dokumentiere Entscheidungen.", icon: UsersRound },
-    Organisation: { title: "Organisation & Benutzer", text: "Verwalte deinen Workspace, Mitglieder, Rollen und Einladungsversand.", icon: Building2 },
-    Mediathek: { title: "Mediathek", text: "Rohmaterial, Entwürfe und veröffentlichte Assets an einem Ort.", icon: FileImage },
-    "KI-Studio": { title: "KI-Studio", text: "Caption, Hashtags, Hooks und Content-Recycling in einem fokussierten Arbeitsbereich.", icon: Sparkles },
+    Organisation: { title: "Organisation & Benutzer", text: "Verwalte dein Team, seine Zugriffsrechte und Einladungen.", icon: Building2 },
+    Mediathek: { title: "Mediathek", text: "Deine Bilder und Videos an einem Ort.", icon: FileImage },
+    "KI-Studio": { title: "KI-Studio", text: "Schreibe Beitragstexte, finde Hashtags und entwickle neue Einstiege.", icon: Sparkles },
+    "Video-Studio": { title: "Video-Studio", text: "Verwandle deine Idee in ein Kurzvideo mit Skript, Sprecherstimme, Stockclips und Untertiteln.", icon: Clapperboard },
     Trends: { title: "Trendradar & Zielgruppenqualität", text: "Öffentliche Hashtag-Signale und individuelle Branchenideen mit nachvollziehbarer Quelle.", icon: TrendingUp },
-    Integrationen: { title: "Integrationen", text: "Verwalte Plattformfreigaben, Provider-Status und sichere Verbindungstests.", icon: Plug },
-    Abrechnung: { title: "Abrechnung", text: "Abonnement, Rechnungen und Planwechsel zentral verwalten.", icon: CircleDollarSign },
+    Integrationen: { title: "Integrationen", text: "Verbinde deine Konten für die Veröffentlichung und sieh ihren aktuellen Status.", icon: Plug },
+    Abrechnung: { title: "Abrechnung", text: "Sieh deinen aktuellen Tarif und seine enthaltenen Funktionen.", icon: CircleDollarSign },
   };
   const feature = featureCopy[view];
   const Icon = feature.icon;
@@ -556,12 +573,12 @@ function FeatureView({
     <div className="feature-view">
       <header><span><Icon aria-hidden="true" /></span><div><h1>{feature.title}</h1><p>{feature.text}</p></div></header>
       {restricted && restrictedFeature ? (
-        <LockedFeature plan={plan} feature={restrictedFeature} />
+        <LockedFeature plan={plan} feature={restrictedFeature} internalTest={internalTest} />
       ) : view === "Kalender" ? (
         <div className="calendar-workspace">
           <div className="calendar-workspace__toolbar">
-            <div><strong>{items.length} Beiträge</strong><span>Klicke einen Post an, um Details zu sehen, ihn zu bearbeiten, zu verschieben oder zu löschen.</span></div>
-            <button className="button" type="button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
+            <div><strong>{items.length} Beiträge</strong><span>Öffne einen Beitrag, um Text und Wunschtermin zu bearbeiten. Ein Kalendereintrag veröffentlicht noch nichts.</span></div>
+            <button className="button" type="button" onClick={onCreate}>Beitrag erstellen <Plus size={17} aria-hidden="true" /></button>
           </div>
           <WeekPlanner items={items} weekStart={weekStart} focusDate={focusDate} onOpenItem={onOpenItem} onPreviousWeek={onPreviousWeek} onNextWeek={onNextWeek} onSelectDay={onSelectDay} />
         </div>
@@ -569,6 +586,8 @@ function FeatureView({
         <MediaLibrary assets={mediaAssets} onUpload={onMediaUpload} persistent={!demo} />
       ) : view === "KI-Studio" ? (
         <AiStudio mode={demo ? "demo" : "workspace"} />
+      ) : view === "Video-Studio" ? (
+        <VideoStudio mode={demo ? "demo" : "workspace"} onAssetCreated={onVideoAssetCreated} />
       ) : view === "Trends" ? (
         <TrendRadar mode={demo ? "demo" : "workspace"} proAccess={planIncludes(plan, "trend_radar")} />
       ) : view === "Organisation" ? (
@@ -577,7 +596,7 @@ function FeatureView({
         <div className="approval-workspace">
           <section className="approval-workspace__organization"><div><span className="feature-kicker">Organisation</span><h2>{organization?.name ?? "Noch keine Organisation"}</h2><p>{organization ? `${organization.members.length} Mitglieder können entsprechend ihrer Rolle zusammenarbeiten.` : "Lege zuerst eine Organisation für Teamfreigaben an."}</p></div>{currentRole === "Administrator" ? <button className="secondary-button" type="button" onClick={onOpenOrganization}><Building2 aria-hidden="true" /> Organisation verwalten</button> : <span className="approval-workspace__role"><ShieldCheck aria-hidden="true" /> Manager</span>}</section>
           <div className="approval-workspace__list">
-            {items.filter((item) => item.status === "Freigabe").length ? items.filter((item) => item.status === "Freigabe").map((item) => <button type="button" onClick={() => onOpenItem(item.id)} key={item.id}><Image src={item.image} alt="" width={74} height={74} /><span><small>{contentTypeLabel(item.channel)} · {formatCalendarMoment(item.date, item.time)}</small><strong>{item.title}</strong><em>Wartet auf Teamfreigabe</em></span><ArrowRight aria-hidden="true" /></button>) : <div className="approval-workspace__empty"><CheckCircle2 aria-hidden="true" /><h2>Keine offenen Freigaben</h2><p>Sobald ein Beitrag den Status „Freigabe“ erhält, erscheint er hier automatisch.</p></div>}
+            {items.filter((item) => item.status === "Freigabe").length ? items.filter((item) => item.status === "Freigabe").map((item) => <button type="button" onClick={() => onOpenItem(item.id)} key={item.id}>{item.image ? <Image unoptimized={item.image.startsWith("/api/") || item.image.startsWith("blob:")} src={item.image} alt="" width={74} height={74} /> : <span className="media-placeholder"><FileImage aria-hidden="true" /></span>}<span><small>{contentTypeLabel(item.channel)} · {formatCalendarMoment(item.date, item.time)}</small><strong>{item.title}</strong><em>Wartet auf Teamfreigabe</em></span><ArrowRight aria-hidden="true" /></button>) : <div className="approval-workspace__empty"><CheckCircle2 aria-hidden="true" /><h2>Keine offenen Freigaben</h2><p>Sobald ein Beitrag den Status „Freigabe“ erhält, erscheint er hier automatisch.</p></div>}
           </div>
         </div>
       ) : view === "Integrationen" ? (
@@ -587,7 +606,7 @@ function FeatureView({
       ) : (
         <div className="feature-view__empty">
           <Icon aria-hidden="true" /><h2>Für den MVP vorbereitet.</h2><p>Die Oberfläche und Adaptergrenzen sind angelegt. Verbinde die Provider-Credentials, um den Live-Flow zu aktivieren.</p>
-          <button className="button" onClick={onCreate}>Content erstellen <Plus size={17} aria-hidden="true" /></button>
+          <button className="button" onClick={onCreate}>Beitrag erstellen <Plus size={17} aria-hidden="true" /></button>
         </div>
       )}
     </div>
@@ -629,6 +648,7 @@ export function DashboardApp({
   initialWorkspaceData?: WorkspaceDashboardData;
 }) {
   const isDemo = mode === "demo";
+  const isMobile = useSyncExternalStore(subscribeMobileNavigation, () => window.matchMedia(mobileNavigationQuery).matches, () => false);
   const [activeView, setActiveView] = useState<DashboardView>(initialView);
   const [query, setQuery] = useState("");
   const [composerOpen, setComposerOpen] = useState(false);
@@ -653,6 +673,9 @@ export function DashboardApp({
   const [seenNotificationIds, setSeenNotificationIds] = useState<Set<string>>(() => new Set());
   const [profileOpen, setProfileOpen] = useState(false);
   const [toast, setToast] = useState(() => connectorFeedbackMessage(connectorFeedback));
+  const [saveStatus, setSaveStatus] = useState<"saved" | "saving" | "error">("saved");
+  const sidebarRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const persistenceRevision = useRef(initialWorkspaceData?.revision ?? 0);
   const persistenceStarted = useRef(false);
   const persistenceQueue = useRef<Promise<void>>(Promise.resolve());
@@ -661,11 +684,35 @@ export function DashboardApp({
   const profileName = `${profile.firstName} ${profile.lastName}`.trim();
   const profileInitial = profile.firstName.trim().slice(0, 1).toLocaleUpperCase("de") || "U";
 
+  useModalInteraction(sidebarRef, sidebarOpen && isMobile, () => setSidebarOpen(false));
+
   useEffect(() => {
-    if (!toast) return;
-    const timeout = window.setTimeout(() => setToast(""), 4_200);
-    return () => window.clearTimeout(timeout);
-  }, [toast]);
+    const onHistoryChange = () => {
+      const slug = new URL(window.location.href).searchParams.get("view") ?? "";
+      setActiveView((Object.entries(viewQueries).find(([, value]) => value === slug)?.[0] as DashboardView | undefined) ?? "Übersicht");
+      setQuery("");
+    };
+    window.addEventListener("popstate", onHistoryChange);
+    return () => window.removeEventListener("popstate", onHistoryChange);
+  }, []);
+
+  function navigate(view: DashboardView) {
+    setActiveView(view);
+    setSidebarOpen(false);
+    setQuery("");
+    const url = new URL(window.location.href);
+    if (viewQueries[view]) url.searchParams.set("view", viewQueries[view]);
+    else url.searchParams.delete("view");
+    url.searchParams.delete("connection_status");
+    url.searchParams.delete("provider");
+    window.history.pushState(null, "", url);
+    requestAnimationFrame(() => {
+      const heading = mainRef.current?.querySelector("h1");
+      heading?.setAttribute("tabindex", "-1");
+      heading?.focus({ preventScroll: true });
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
+  }
 
   useEffect(() => () => {
     uploadedMediaUrls.current.forEach((url) => URL.revokeObjectURL(url));
@@ -688,7 +735,7 @@ export function DashboardApp({
 
   useEffect(() => {
     if (!isDemo || !demoCookiesHydrated.current) return;
-    writeDemoCookie(demoCookieNames.items, items);
+    writeDemoCookie(demoCookieNames.items, items.map((item) => ({ ...item, image: item.image.startsWith("blob:") ? "" : item.image })));
     writeDemoCookie(demoCookieNames.organization, organization);
     writeDemoCookie(demoCookieNames.profile, { ...profile, avatarUrl: profile.avatarUrl.startsWith("blob:") ? "" : profile.avatarUrl });
   }, [isDemo, items, organization, profile]);
@@ -702,6 +749,7 @@ export function DashboardApp({
 
     const snapshot = { items, organization, profile };
     const timeout = window.setTimeout(() => {
+      setSaveStatus("saving");
       persistenceQueue.current = persistenceQueue.current
         .catch(() => undefined)
         .then(async () => {
@@ -715,8 +763,10 @@ export function DashboardApp({
             throw new Error(result.error ?? "Workspace-Daten konnten nicht gespeichert werden.");
           }
           persistenceRevision.current = result.revision;
+          setSaveStatus("saved");
         })
         .catch((cause) => {
+          setSaveStatus("error");
           setToast(cause instanceof Error ? cause.message : "Workspace-Daten konnten nicht gespeichert werden.");
         });
     }, 450);
@@ -740,12 +790,27 @@ export function DashboardApp({
       if (item.status === "Entwurf") return [{ id: `draft-${item.id}`, title: `${contentTypeLabel(item.channel)} fertigstellen`, detail: `${item.title} ist noch ein Entwurf.`, kind: "draft", itemId: item.id }];
       return [];
     });
-    const connectorNotices = currentRole === "Administrator" ? connectors.filter((connector) => !connector.connection).map((connector): LiveNotice => ({ id: `connector-${connector.provider}`, title: `${connector.label} verbinden`, detail: connector.configured ? "Der offizielle Login ist bereit." : "Provider-Konfiguration ist noch unvollständig.", kind: "connector" })) : [];
+    const connectorNotices = currentRole === "Administrator" ? connectors.filter((connector) => !connector.connection).map((connector): LiveNotice => ({ id: `connector-${connector.provider}`, title: `${connector.label} verbinden`, detail: connector.configured ? "Der offizielle Login ist bereit." : "Die Verbindung zu diesem Kanal ist noch nicht verfügbar.", kind: "connector" })) : [];
     return [...contentNotices, ...connectorNotices];
   }, [connectors, currentRole, items]);
   const unreadNotices = notices.filter((notice) => !seenNotificationIds.has(notice.id));
 
-  function addContent(content: { title: string; channel: Channel; caption: string; date: string; time: string }) {
+  async function addContent(content: { title: string; channel: Channel; caption: string; date: string; time: string; file?: File }) {
+    let image = "";
+    if (content.file) {
+      if (isDemo) {
+        image = URL.createObjectURL(content.file);
+        uploadedMediaUrls.current.push(image);
+      } else {
+        const formData = new FormData();
+        formData.append("files", content.file);
+        const response = await fetch("/api/workspace/media", { method: "POST", body: formData });
+        const result = await response.json() as { assets?: MediaAsset[]; error?: string };
+        if (!response.ok || !result.assets?.[0]) throw new Error(result.error ?? "Das Beitragsbild konnte nicht hochgeladen werden. Bitte versuche es erneut.");
+        image = result.assets[0].preview;
+        setMediaAssets((current) => [...result.assets!, ...current]);
+      }
+    }
     const nextItem: ScheduleItem = {
       id: crypto.randomUUID(),
       date: content.date,
@@ -754,13 +819,13 @@ export function DashboardApp({
       caption: content.caption,
       channel: content.channel,
       status: "Entwurf",
-      image: "/media/design-studio.webp",
+      image,
     };
     setItems((current) => [...current, nextItem]);
     setCalendarWeekStart(getWeekStart(content.date));
     setCalendarFocusDate(content.date);
     setComposerOpen(false);
-    setToast(`Entwurf für ${formatCalendarMoment(content.date, content.time)} angelegt.`);
+    setToast(`Entwurf für ${formatCalendarMoment(content.date, content.time)} angelegt. ${isDemo ? "Nur in dieser Demo." : "Die Speicherung läuft automatisch."}`);
   }
 
   function openCreate() {
@@ -778,13 +843,13 @@ export function DashboardApp({
     setCalendarWeekStart(getWeekStart(updatedItem.date));
     setCalendarFocusDate(updatedItem.date);
     setSelectedItemId(null);
-    setToast(`Beitrag auf ${formatCalendarMoment(updatedItem.date, updatedItem.time)} verschoben und gespeichert.`);
+    setToast(`Beitrag aktualisiert. Wunschtermin: ${formatCalendarMoment(updatedItem.date, updatedItem.time)}.`);
   }
 
   function deleteItem(id: string) {
     setItems((current) => current.filter((item) => item.id !== id));
     setSelectedItemId(null);
-    setToast(isDemo ? "Beitrag wurde aus dem Demo-Kalender gelöscht." : "Beitrag wurde dauerhaft aus dem Workspace gelöscht.");
+    setToast(isDemo ? "Beitrag aus dem Demo-Kalender entfernt." : "Beitrag entfernt. Die Änderung wird gespeichert.");
   }
 
   function changeWeek(amount: number) {
@@ -811,7 +876,7 @@ export function DashboardApp({
     setSeenNotificationIds((current) => new Set([...current, notice.id]));
     setNotificationsOpen(false);
     if (notice.itemId) openItem(notice.itemId);
-    else setActiveView("Integrationen");
+    else navigate("Integrationen");
   }
 
   function deleteOrganization() {
@@ -822,7 +887,7 @@ export function DashboardApp({
     setMediaAssets([]);
     setSelectedItemId(null);
     setActiveDraftIndex(0);
-    setToast("Organisation, Mitglieder und lokale Demo-Inhalte wurden entfernt.");
+    setToast(isDemo ? "Organisation, Mitglieder und Demo-Inhalte entfernt." : "Organisation und Inhalte entfernt. Die Änderung wird gespeichert.");
   }
 
   async function saveProfile(nextProfile: UserProfile, avatarFile?: File) {
@@ -842,7 +907,7 @@ export function DashboardApp({
           avatarUrl = result.avatarUrl;
         } catch (cause) {
           setToast(cause instanceof Error ? cause.message : "Das Profilbild konnte nicht gespeichert werden.");
-          return;
+          throw cause;
         }
       }
     }
@@ -909,14 +974,15 @@ export function DashboardApp({
   }
 
   return (
-    <main className={`dashboard-app${isDemo ? " dashboard-app--demo" : ""}${sidebarCollapsed ? " dashboard-app--collapsed" : ""}`}>
-      <aside className={`dashboard-sidebar${sidebarOpen ? " is-open" : ""}`}>
-        <div className="dashboard-sidebar__brand"><Link href="/"><BrandMark compact /></Link><button onClick={() => setSidebarOpen(false)} aria-label="Menü schließen"><X /></button></div>
+    <div className={`dashboard-app${isDemo ? " dashboard-app--demo" : ""}${sidebarCollapsed ? " dashboard-app--collapsed" : ""}${sidebarOpen ? " dashboard-app--navigation-open" : ""}`}>
+      {sidebarOpen && isMobile ? <div className="dashboard-navigation-backdrop" aria-hidden="true" onClick={() => setSidebarOpen(false)} /> : null}
+      <aside ref={sidebarRef} id="dashboard-navigation" className={`dashboard-sidebar${sidebarOpen ? " is-open" : ""}`} role={sidebarOpen && isMobile ? "dialog" : undefined} aria-modal={(sidebarOpen && isMobile) || undefined} aria-label="Hauptnavigation" inert={isMobile && !sidebarOpen} tabIndex={-1}>
+        <div className="dashboard-sidebar__brand"><Link href="/" aria-label="ContentDock Startseite"><BrandMark compact /></Link><button className="dashboard-sidebar__close" onClick={() => setSidebarOpen(false)} aria-label="Menü schließen"><X /></button></div>
         <nav aria-label="Workspace-Navigation">
           {visibleNavItems.map(({ name, icon: Icon, feature }) => {
             const locked = !isDemo && Boolean(feature && !planIncludes(plan, feature));
             return (
-              <button className={`${visibleView === name ? "is-active" : ""}${locked ? " is-locked" : ""}`} onClick={() => { setActiveView(name); setSidebarOpen(false); }} key={name}>
+              <button className={`${visibleView === name ? "is-active" : ""}${locked ? " is-locked" : ""}`} onClick={() => navigate(name)} aria-current={visibleView === name ? "page" : undefined} aria-label={`${name}${locked ? " – im höheren Tarif verfügbar" : ""}`} title={name} key={name}>
                 <Icon aria-hidden="true" /><span>{name}</span>{locked ? <LockKeyhole className="dashboard-sidebar__lock" aria-label="In diesem Tarif gesperrt" /> : null}
               </button>
             );
@@ -925,30 +991,31 @@ export function DashboardApp({
         <button className="dashboard-sidebar__collapse" type="button" onClick={toggleSidebar} aria-expanded={!sidebarCollapsed} aria-label={sidebarCollapsed ? "Seitenmenü erweitern" : "Seitenmenü reduzieren"}><ChevronRight aria-hidden="true" /><span>{sidebarCollapsed ? "Menü erweitern" : "Menü reduzieren"}</span></button>
       </aside>
 
-      <section className="dashboard-shell">
+      <section className="dashboard-shell" inert={sidebarOpen && isMobile}>
         {isDemo ? (
           <div className="demo-banner">
-            <span><LockKeyhole aria-hidden="true" /> Live-Demo · Veröffentlichung gesperrt</span>
+            <span><LockKeyhole aria-hidden="true" /> Demo mit Beispieldaten · keine Veröffentlichung</span>
             <Link href="/#preise">Abo auswählen <ArrowRight size={15} aria-hidden="true" /></Link>
           </div>
         ) : null}
         <header className="dashboard-topbar">
-          <button className="dashboard-topbar__menu" onClick={() => { setSidebarCollapsed(false); setSidebarOpen(true); }} aria-label="Menü öffnen"><Menu /></button>
-          <button className="workspace-switcher" type="button" onClick={() => { if (currentRole === "Administrator") setActiveView("Organisation"); }} aria-label={currentRole === "Administrator" ? "Organisation verwalten" : "Aktive Organisation"}><LayoutGrid aria-hidden="true" /><span>{organization?.name ?? "Organisation anlegen"}</span><em>{currentRole}</em><ChevronRight aria-hidden="true" /></button>
-          <label className="dashboard-search"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Suchen (z. B. Inhalte, Kanäle, Vorlagen)" aria-label="Workspace durchsuchen" />{query ? <button onClick={() => setQuery("")} aria-label="Suche löschen"><X /></button> : null}</label>
+          <button className="dashboard-topbar__menu" onClick={() => { setSidebarCollapsed(false); setSidebarOpen(true); }} aria-label="Menü öffnen" aria-expanded={sidebarOpen} aria-controls="dashboard-navigation"><Menu /></button>
+          <button className="workspace-switcher" type="button" onClick={() => { if (currentRole === "Administrator") navigate("Organisation"); }} disabled={currentRole !== "Administrator"} aria-label={currentRole === "Administrator" ? "Organisation verwalten" : "Aktive Organisation"}><LayoutGrid aria-hidden="true" /><span>{organization?.name ?? "Organisation anlegen"}</span><em>{currentRole}</em><ChevronRight aria-hidden="true" /></button>
+          <label className="dashboard-search"><Search aria-hidden="true" /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Beiträge nach Titel, Kanal oder Status suchen" aria-label="Beiträge durchsuchen" />{query ? <button type="button" onClick={() => setQuery("")} aria-label="Suche löschen"><X /></button> : null}</label>
           <div className="dashboard-profile">
+            <ThemeToggle />
             <button type="button" onClick={toggleNotifications} aria-expanded={notificationsOpen} aria-label="Benachrichtigungen"><Bell aria-hidden="true" />{unreadNotices.length ? <i /> : null}</button>
             <button className="dashboard-profile__identity" type="button" onClick={() => setProfileOpen(true)} aria-label="Eigenes Profil bearbeiten">
-              <span>{profile.avatarUrl ? <Image src={profile.avatarUrl} alt="" fill unoptimized={profile.avatarUrl.startsWith("blob:")} sizes="36px" /> : profileInitial}</span>
+              <span>{profile.avatarUrl ? <Image src={profile.avatarUrl} alt="" fill unoptimized={profile.avatarUrl.startsWith("blob:") || profile.avatarUrl.startsWith("/api/")} sizes="36px" /> : profileInitial}</span>
               <div><strong>{profileName}</strong><small>{isDemo ? "Demo-Profil" : `${activePlan.label}${internalTest ? " · Testkonto" : ""}`}</small></div>
             </button>
             {!isDemo ? <form action={logout}><button type="submit" aria-label="Abmelden" title="Abmelden"><LogOut aria-hidden="true" /></button></form> : null}
           </div>
-          {notificationsOpen ? <section className="notification-menu" aria-label="Benachrichtigungsmenü"><header><div><strong>Mitteilungen</strong><span>{unreadNotices.length ? `${unreadNotices.length} offen` : "Aktuell"}</span></div><button type="button" onClick={toggleNotifications} aria-label="Mitteilungen schließen"><X /></button></header>{unreadNotices.length ? <div>{unreadNotices.map((notice) => <button type="button" onClick={() => openNotice(notice)} key={notice.id}><span className={`notification-menu__icon notification-menu__icon--${notice.kind}`}>{notice.kind === "connector" ? <Plug /> : <CalendarDays />}</span><span><strong>{notice.title}</strong><small>{notice.detail}</small></span><ChevronRight /></button>)}</div> : <div className="notification-menu__empty"><CheckCircle2 aria-hidden="true" /><strong>Alles erledigt</strong><span>Es gibt keine neuen Mitteilungen.</span></div>}</section> : null}
+          {notificationsOpen ? <DashboardDialog labelledBy="notifications-title" onClose={toggleNotifications}><section className="notification-menu"><header><div><strong id="notifications-title">Mitteilungen</strong><span>{unreadNotices.length ? `${unreadNotices.length} offen` : "Aktuell"}</span></div><button type="button" onClick={toggleNotifications} aria-label="Mitteilungen schließen"><X /></button></header>{unreadNotices.length ? <div>{unreadNotices.map((notice) => <button type="button" onClick={() => openNotice(notice)} key={notice.id}><span className={`notification-menu__icon notification-menu__icon--${notice.kind}`}>{notice.kind === "connector" ? <Plug aria-hidden="true" /> : <CalendarDays aria-hidden="true" />}</span><span><strong>{notice.title}</strong><small>{notice.detail}</small></span><ChevronRight aria-hidden="true" /></button>)}</div> : <div className="notification-menu__empty"><CheckCircle2 aria-hidden="true" /><strong>Alles erledigt</strong><span>Es gibt keine neuen Mitteilungen.</span></div>}</section></DashboardDialog> : null}
         </header>
-        <div className="dashboard-content">
-          {query && filteredItems.length !== items.length ? <div className="search-result-note">{filteredItems.length} Inhalte passen zu „{query}“.</div> : null}
-          {visibleView === "Übersicht" ? (
+        <main ref={mainRef} id="main-content" className="dashboard-content dashboard-main-content" tabIndex={-1}>
+          {!isDemo ? <div className="dashboard-save-status" data-state={saveStatus} role="status">{saveStatus === "saving" ? "Änderungen werden gespeichert …" : saveStatus === "error" ? "Änderungen konnten nicht gespeichert werden. Bitte lasse diese Seite geöffnet." : "Alle Änderungen gespeichert"}{saveStatus === "error" ? <button type="button" onClick={() => { setSaveStatus("saving"); void persistWorkspaceNow().then(() => setSaveStatus("saved")).catch(() => setSaveStatus("error")); }}>Speichern erneut versuchen</button> : null}</div> : null}
+          {query.trim() ? <section className="dashboard-search-results" aria-labelledby="search-results-title"><header><h1 id="search-results-title">Suchergebnisse</h1><p role="status">{filteredItems.length} {filteredItems.length === 1 ? "Beitrag" : "Beiträge"} für „{query}“</p><button className="secondary-button" type="button" onClick={() => setQuery("")}>Zurück zu {visibleView}</button></header>{filteredItems.length ? <div>{filteredItems.map((item) => <button key={item.id} type="button" onClick={() => openItem(item.id)}><span><strong>{item.title}</strong><small>{item.channel} · {formatCalendarMoment(item.date, item.time)}</small></span><span className={`status status--${item.status.toLowerCase()}`}>{item.status}</span><ChevronRight aria-hidden="true" /></button>)}</div> : <p>Kein Beitrag gefunden. Suche nach einem anderen Titel, Kanal oder Status.</p>}</section> : visibleView === "Übersicht" ? (
             <Overview
               items={filteredItems}
               onCreate={openCreate}
@@ -960,8 +1027,9 @@ export function DashboardApp({
               onPreviousWeek={() => changeWeek(-1)}
               onNextWeek={() => changeWeek(1)}
               onSelectDay={selectCalendarDay}
-              onOpenTrends={() => setActiveView("Trends")}
-              onOpenIntegrations={() => { if (currentRole === "Administrator") setActiveView("Integrationen"); }}
+              onOpenTrends={() => navigate("Trends")}
+              onOpenIntegrations={() => { if (currentRole === "Administrator") navigate("Integrationen"); }}
+              onOpenVideoStudio={() => navigate("Video-Studio")}
               connectors={connectors}
               notices={notices}
               unfinishedItems={unfinishedItems}
@@ -981,6 +1049,7 @@ export function DashboardApp({
               onSelectDay={selectCalendarDay}
               mediaAssets={mediaAssets}
               onMediaUpload={uploadMedia}
+              onVideoAssetCreated={(asset) => setMediaAssets((current) => current.some((entry) => entry.id === asset.id) ? current : [asset, ...current])}
               demo={isDemo}
               connectors={connectors}
               plan={plan}
@@ -989,18 +1058,18 @@ export function DashboardApp({
               onOrganizationChange={setOrganization}
               onOrganizationDelete={deleteOrganization}
               onToast={setToast}
-              onOpenOrganization={() => setActiveView("Organisation")}
+              onOpenOrganization={() => navigate("Organisation")}
               profile={profile}
               currentRole={currentRole}
               onBeforeInvite={persistWorkspaceNow}
             />
           )}
-        </div>
+        </main>
       </section>
       {composerOpen ? <ContentComposer mode={mode} onClose={() => setComposerOpen(false)} onCreate={addContent} /> : null}
       {selectedItem ? <ScheduleItemDialog key={selectedItem.id} item={selectedItem} onClose={() => setSelectedItemId(null)} onSave={saveItem} onDelete={deleteItem} /> : null}
       {profileOpen ? <ProfileDialog profile={profile} onClose={() => setProfileOpen(false)} onSave={saveProfile} /> : null}
-      {toast ? <div className="app-toast"><CheckCircle2 aria-hidden="true" /> {toast}</div> : null}
-    </main>
+      {toast ? <div className="app-toast" role="status"><span>{toast}</span><button className="app-toast__dismiss" type="button" onClick={() => setToast("")} aria-label="Meldung schließen"><X aria-hidden="true" /></button></div> : null}
+    </div>
   );
 }

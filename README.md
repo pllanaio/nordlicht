@@ -26,7 +26,7 @@ Der aktuelle Stand ist ein hochwertiger, interaktiver MVP. Er demonstriert das v
 | `/demo` | Öffentliche, interaktive Live-Demo mit Account-Connect, Entwürfen und Planung |
 | `/trends` | Öffentlicher Trendradar mit Quellen und plattformspezifischen Hashtag-Signalen |
 | `/subscribe` | Planbezogener Mollie-Checkout mit Name und E-Mail |
-| `/login` | Anmeldung für bestehende Abonnenten |
+| `/login` | Anmeldung für konfigurierte interne Testkonten |
 | `/dashboard` | Abonnementgeschütztes Command Center mit Kalender, Suche und Navigation |
 | `/dashboard` → `Content erstellen` | Geschützter Upload-, KI-Text- und Planungs-Flow |
 
@@ -39,13 +39,16 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 - Auswählbare Kalendertage, ISO-Kalenderwochen sowie direkt bearbeitbare Entwürfe und Freigaben
 - Medien-Upload mit Bild-/Video-Vorschau; sitzungsgebunden in der Demo und datenbankpersistiert im angemeldeten Test-Workspace
 - KI-Studio für Captions, Hashtags, Hooks und Content-Recycling; als lokale Tech-Demo oder im Workspace per persönlichem API-Key
-- Meta-/Instagram- und TikTok-Publishing-Adapter für autorisierte Konten
-- OAuth-Connectoren für Instagram, LinkedIn und TikTok mit offiziellem Provider-Login
+- Video-Studio: Thema oder eigenes Skript → OpenAI-Sprecherstimme → Pexels-Stockclips → zeitbasierte Untertitel → HD-MP4 in der Mediathek
+- Dauerhafte Video- und Veröffentlichungsaufträge mit Fortschritt, Abbruch, Idempotenz und getrennten Fehlerzuständen
+- Direkte Veröffentlichung fertiger Videos auf Instagram, TikTok und YouTube nach Vorschau und ausdrücklicher Bestätigung je Kanal
+- Publishing-Worker für autorisierte Instagram-, TikTok- und YouTube-Konten
+- OAuth-Connectoren für Instagram, LinkedIn, TikTok und YouTube mit offiziellem Provider-Login
 - Organisationsverwaltung mit Administrator-/Manager-RBAC, Mitgliederverwaltung und geschütztem SMTP-Einladungsversand
 - Bearbeitbares Benutzerprofil und datenbasiertes Benachrichtigungsmenü
 - Progressive OAuth-Scopes: Basisverbindung in der Demo, Publishing-Freigabe erst nach Aboabschluss
 - HMAC-gesicherter OAuth-State, minimale Scopes sowie verschlüsselte Token-Cookies in der Demo und persistente Social-Verbindungen im Workspace
-- Mollie First-Payment-Flow als Basis für monatliche Abonnements
+- Mollie First-Payment-Flow für den ursprünglichen 30-Tage-Zeitraum; reguläre Wiederanmeldung und wiederkehrende Abrechnung stehen noch aus
 - Serverseitiges Abo-Gate für Workspace und KI-Endpunkt
 - Signierte, kurzlebige Berechtigung erst nach autoritativ bestätigter Mollie-Zahlung
 - Öffentlich einsehbarer Trendradar mit transparenter Abgrenzung zwischen öffentlichen Rankings und Themen-Signalen
@@ -59,7 +62,7 @@ Ohne serverseitig bestätigte Abo-Berechtigung leitet `/dashboard` zurück zur A
 2. **Keine Algorithmus-Versprechen.** Erklärbare Signale und Testvorschläge statt behaupteter „Erkennung“ geheimer Rankinglogik.
 3. **Keine diskriminierende Follower-Selektion.** Namen, Sprache, Herkunft oder Profilfoto sind keine Entfernungskriterien. Verdachtsfälle beruhen auf transparenten Verhaltenssignalen und bleiben manuell.
 4. **Keine Scheinintegrationen.** UI-Status unterscheidet zwischen konfigurierbar, Review erforderlich und reiner Übergabe.
-5. **BYOK ohne dauerhafte Speicherung.** Der Demo-MVP reicht den persönlichen KI-Key nur an die jeweilige Serveranfrage weiter.
+5. **BYOK mit transparenter Lebensdauer.** Textanfragen reichen den persönlichen KI-Key direkt weiter. Videoaufträge speichern ihn nach ausdrücklicher Zustimmung vorübergehend AES-GCM-verschlüsselt, maximal eine Stunde; Abschluss, Fehler, Abbruch und Ablauf löschen ihn aus dem aktiven Auftrag. Backup-Aufbewahrung muss der Betreiber separat begrenzen.
 
 ## Tech-Stack
 
@@ -89,6 +92,7 @@ Qualitätschecks:
 ```bash
 npm run typecheck
 npm run lint
+npm test
 npm run build
 ```
 
@@ -168,6 +172,11 @@ Vor jedem App-Start führt der einmalige `migrate`-Service noch nicht angewendet
 | `OAUTH_STATE_SECRET` | Signiert kurzlebige OAuth-Anfragen gegen Login-CSRF | Für Social Connect |
 | `SOCIAL_TOKEN_ENCRYPTION_KEY` | 32-Byte-Base64-Key für AES-256-GCM | Für Social Connect |
 | `WORKSPACE_DATA_ENCRYPTION_KEY` | Separater 32-Byte-Base64-Key für gespeicherte Workspace-Secrets wie SMTP | Für persistente Organisationen |
+| `VIDEO_GENERATION_ENABLED`, `PEXELS_API_KEY` | Videoerstellung einschalten; Pexels-Key nur im Video-Worker | Nein |
+| `PUBLISHING_ENABLED` | Direkte Video-Veröffentlichung mit laufendem Publishing-Worker | Nein |
+| `PUBLISHING_MEDIA_SECRET` | Unabhängiges Secret (mindestens 32 Zeichen) für kurzlebige Medienlinks | Nein |
+| `MEDIA_DELIVERY_URL` | HTTPS-Origin des Mediendienstes, für große Videos auf Vercel erforderlich | Nein |
+| `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` | Google OAuth-App für YouTube | Für YouTube-Connect |
 
 Secrets gehören ausschließlich in lokale/Vercel-Umgebungsvariablen. Niemals Werte aus `.env.local` committen.
 
@@ -229,6 +238,12 @@ docs/                            Architektur und Capability-Matrix
 ```
 
 ## Vom MVP zur Produktion
+
+Die neue Video-Integration, Worker-Konfiguration und konkrete Freigabegrenzen sind in [docs/VIDEO-STUDIO.md](docs/VIDEO-STUDIO.md) und [docs/PUBLISHING.md](docs/PUBLISHING.md) dokumentiert. Die Umsetzung wurde aus dem MoneyPrinterTurbo-Ablauf abgeleitet; [REA-Analyse und Quellenstand](docs/REA-ANALYSIS.md) halten die Evidenz fest. Eine abgeschlossene lokale Prüfung ersetzt keine Plattform-App-Freigabe oder Live-Abnahme mit Betreiberkonten.
+
+Die [UI/UX-Dokumentation](docs/UI-UX.md) beschreibt die Überarbeitung anhand der Nutzerleitlinie und Apple HIG. Der mit dem Cloudflare-Skill begonnene Audit ist wegen einer automatischen Prüfblockierung **unvollständig**; [Prüfstand und offene Voraussetzungen](docs/SECURITY-REVIEW.md) trennen umgesetzte Schutzmaßnahmen von noch erforderlicher Validierung.
+
+Der bisherige First-Payment-Checkout ist jetzt auf den ursprünglichen 30-Tage-Zeitraum begrenzt und prüft Mollie-Zahlungen einschließlich Erstattung/Chargeback erneut. Ein alter Zahlungsbeleg kann keinen unbegrenzten Zugang mehr verlängern. Wiederkehrende Abbuchungen und reguläre Kundenanmeldung nach Sitzungsablauf sind weiterhin vor einem öffentlichen Abo-Launch fertigzustellen.
 
 - Identity Provider und serverseitige Session-Validierung anbinden
 - Vollständigen Abo-Lebenszyklus persistieren und Datenbank-Tenant-Isolation/RLS zusätzlich zur Server-Autorisierung aktivieren

@@ -74,6 +74,9 @@ function fromDatabaseStatus(status: string): ScheduleStatus {
 
 export async function ensureWorkspaceContext(client: PoolClient, entitlement: SubscriptionEntitlement): Promise<WorkspaceContext> {
   const externalAuthId = `${entitlement.source}:${entitlement.paymentId}`;
+  // All callers hold a transaction. Serialize first-use provisioning so parallel
+  // dashboard loads cannot create different workspaces for the same principal.
+  await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [externalAuthId]);
   const names = splitDisplayName(entitlement.displayName);
   const email = entitlement.email && emailPattern.test(entitlement.email) ? entitlement.email.toLocaleLowerCase("en-US") : fallbackEmail(entitlement);
   const displayName = `${names.firstName} ${names.lastName}`.trim();
@@ -117,10 +120,12 @@ export async function ensureWorkspaceContext(client: PoolClient, entitlement: Su
 
   const context = membership.rows[0];
   await client.query(
-    `insert into subscription (workspace_id, plan, status, mollie_first_payment_id)
-     values ($1, $2, 'active', $3)
-     on conflict (workspace_id) do update set plan = excluded.plan, status = 'active', updated_at = now()`,
-    [context.workspaceId, entitlement.plan satisfies PlanId, entitlement.source === "mollie" ? entitlement.paymentId : null],
+    `insert into subscription (workspace_id, plan, status, mollie_first_payment_id, current_period_end, access_checked_at)
+     values ($1, $2, 'active', $3, $4, now())
+     on conflict (workspace_id) do update set plan = excluded.plan, status = 'active',
+       current_period_end = excluded.current_period_end, access_checked_at = now(), updated_at = now()`,
+    [context.workspaceId, entitlement.plan satisfies PlanId, entitlement.source === "mollie" ? entitlement.paymentId : null,
+      new Date(entitlement.accessUntil ?? entitlement.expiresAt)],
   );
   return context;
 }
@@ -232,7 +237,7 @@ function parseItems(value: unknown): ScheduleItem[] {
     const caption = cleanString(candidate.caption, 5_000);
     const channel = cleanString(candidate.channel, 20);
     const status = cleanString(candidate.status, 20);
-    const image = cleanString(candidate.image, 500) || "/media/design-studio.webp";
+    const image = cleanString(candidate.image, 500);
     if (!id || !datePattern.test(date) || !timePattern.test(time) || !title || !channels.has(channel) || !statuses.has(status)) throw new Error("Inhalt ist unvollständig");
     return { id, date, time, title, caption, channel: channel as ScheduleItem["channel"], status: status as ScheduleStatus, image };
   });
@@ -288,6 +293,16 @@ export async function saveWorkspaceState(entitlement: SubscriptionEntitlement, i
       "select data_revision::integer as revision from workspace where id = $1 for update",
       [context.workspaceId],
     );
+    // Membership may have changed while this request waited for the workspace
+    // lock. Authorize against the current row, not the earlier context snapshot.
+    const currentMembership = await client.query<{ role: MembershipRole }>(
+      "select role from workspace_member where workspace_id = $1 and user_id = $2 for share",
+      [context.workspaceId, context.userId],
+    );
+    const currentRole = currentMembership.rows[0]?.role;
+    if (!currentRole || currentRole === "reviewer") {
+      throw Object.assign(new Error("Du darfst diesen Workspace nicht bearbeiten."), { code: "workspace_forbidden" });
+    }
     if (locked.rows[0]?.revision !== input.revision) {
       await client.query("rollback");
       return { conflict: true as const, revision: locked.rows[0]?.revision ?? context.revision };
@@ -309,23 +324,61 @@ export async function saveWorkspaceState(entitlement: SubscriptionEntitlement, i
       );
     }
 
-    const isAdministrator = context.role === "owner" || context.role === "admin";
+    const isAdministrator = currentRole === "owner" || currentRole === "admin";
     if (isAdministrator) {
       if (!input.organization) {
         await client.query("update workspace set configured = false where id = $1", [context.workspaceId]);
+        await client.query("delete from workspace_member where workspace_id = $1 and user_id <> $2 and role <> 'owner'", [context.workspaceId, context.userId]);
         await client.query("delete from workspace_invite where workspace_id = $1", [context.workspaceId]);
         await client.query("delete from workspace_smtp_settings where workspace_id = $1", [context.workspaceId]);
         await client.query("delete from media_asset where workspace_id = $1", [context.workspaceId]);
       } else {
         await client.query("update workspace set name = $2, configured = true where id = $1", [context.workspaceId, input.organization.name]);
-        await client.query("delete from workspace_invite where workspace_id = $1", [context.workspaceId]);
-        for (const member of input.organization.members.filter((member) => member.email !== input.profile.email)) {
-          await client.query(
-            `insert into workspace_invite (id, workspace_id, email, first_name, last_name, role, status)
-             values ($1, $2, $3, $4, $5, $6, $7)`,
-            [uuidPattern.test(member.id) ? member.id : randomUUID(), context.workspaceId, member.email, member.firstName, member.lastName, toMembershipRole(member.role), member.status === "Aktiv" ? "active" : "invited"],
-          );
+        const members = await client.query<{ id: string; email: string; role: MembershipRole }>(
+          `select wm.user_id as id, u.email, wm.role from workspace_member wm
+             join app_user u on u.id = wm.user_id where wm.workspace_id = $1`,
+          [context.workspaceId],
+        );
+        const submitted = new Map(input.organization.members.map((member) => [member.id, member]));
+        if (submitted.size !== input.organization.members.length) throw new Error("Mitglieder dürfen nicht mehrfach aufgeführt werden.");
+        const existingIds = new Set(members.rows.map((member) => member.id));
+        const existingEmails = new Set(members.rows.map((member) => member.email.toLocaleLowerCase("en-US")));
+        for (const member of members.rows) {
+          // Neither a hidden/omitted row nor edited client fields may revoke the
+          // owner or the acting administrator's own membership.
+          if (member.role === "owner" || member.id === context.userId) continue;
+          const requested = submitted.get(member.id);
+          if (!requested) {
+            await client.query("delete from workspace_member where workspace_id = $1 and user_id = $2", [context.workspaceId, member.id]);
+          } else if (requested.role !== toOrganizationRole(member.role)) {
+            // The current UI maps both editor and reviewer to Manager. An
+            // unchanged label must never silently promote a reviewer to editor.
+            await client.query("update workspace_member set role = $3 where workspace_id = $1 and user_id = $2", [context.workspaceId, member.id, toMembershipRole(requested.role)]);
+          }
         }
+
+        const retainedInvites: string[] = [];
+        const inviteEmails = new Set<string>();
+        for (const member of input.organization.members) {
+          // Existing membership is identified only by user id. An email match
+          // cannot create membership, and real members never need shadow invites.
+          if (existingIds.has(member.id) || existingEmails.has(member.email.toLocaleLowerCase("en-US"))) continue;
+          if (inviteEmails.has(member.email)) throw new Error("Eine E-Mail-Adresse darf nur einmal eingeladen werden.");
+          inviteEmails.add(member.email);
+          const invitation = await client.query<{ id: string }>(
+            `insert into workspace_invite (workspace_id, email, first_name, last_name, role, status)
+             values ($1, $2, $3, $4, $5, 'invited')
+             on conflict (workspace_id, email) do update set first_name = excluded.first_name,
+               last_name = excluded.last_name, role = excluded.role, status = 'invited'
+             returning id`,
+            [context.workspaceId, member.email, member.firstName, member.lastName, toMembershipRole(member.role)],
+          );
+          retainedInvites.push(invitation.rows[0].id);
+        }
+        await client.query(
+          "delete from workspace_invite where workspace_id = $1 and not (id = any($2::uuid[]))",
+          [context.workspaceId, retainedInvites],
+        );
 
         const smtp = input.organization.smtp;
         const smtpComplete = Boolean(smtp.host && smtp.username && smtp.fromEmail && Number(smtp.port));
@@ -371,7 +424,10 @@ export async function getWorkspaceInvitationSettings(entitlement: SubscriptionEn
   try {
     await client.query("begin");
     const context = await ensureWorkspaceContext(client, entitlement);
-    if (context.role !== "owner" && context.role !== "admin") return null;
+    if (context.role !== "owner" && context.role !== "admin") {
+      await client.query("rollback");
+      return null;
+    }
     const result = await client.query<{ organizationName: string; host: string; port: number; username: string; encryptedPassword: Buffer; fromEmail: string; encryption: SmtpSettings["encryption"] }>(
       `select w.name as "organizationName", s.host, s.port, s.username,
               s.encrypted_password as "encryptedPassword", s.from_email as "fromEmail", s.encryption

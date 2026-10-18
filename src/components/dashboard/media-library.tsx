@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { DashboardDialog } from "@/components/dashboard/dashboard-dialog";
 import { useMemo, useState } from "react";
 import { Eye, FileVideo, ImageIcon, Search, Upload, X } from "lucide-react";
 import type { MediaAsset } from "@/lib/workspace-types";
@@ -24,24 +25,27 @@ function AssetPreview({ asset, fill = false }: { asset: MediaAsset; fill?: boole
     return <video src={asset.preview} muted playsInline controls={!fill} aria-label={`Videovorschau ${asset.name}`} />;
   }
   return fill
-    ? <Image src={asset.preview} alt={asset.name} fill unoptimized={asset.preview.startsWith("blob:")} sizes="(max-width: 720px) 50vw, 260px" />
-    : <Image src={asset.preview} alt={asset.name} width={620} height={420} unoptimized={asset.preview.startsWith("blob:")} sizes="(max-width: 720px) 90vw, 620px" />;
+    ? <Image src={asset.preview} alt={asset.name} fill unoptimized={asset.preview.startsWith("blob:") || asset.preview.startsWith("/api/")} sizes="(max-width: 720px) 50vw, 260px" />
+    : <Image src={asset.preview} alt={asset.name} width={620} height={420} unoptimized={asset.preview.startsWith("blob:") || asset.preview.startsWith("/api/")} sizes="(max-width: 720px) 90vw, 620px" />;
 }
 
 export function MediaLibrary({ assets, onUpload, persistent = false }: { assets: MediaAsset[]; onUpload: (files: File[]) => void; persistent?: boolean }) {
   const [filter, setFilter] = useState<"all" | "image" | "video">("all");
   const [query, setQuery] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
   const selected = selectedId ? assets.find((asset) => asset.id === selectedId) : undefined;
   const visibleAssets = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("de");
     return assets.filter((asset) => (filter === "all" || asset.kind === filter) && (!normalized || asset.name.toLocaleLowerCase("de").includes(normalized)));
   }, [assets, filter, query]);
 
-  function selectFiles(event: React.ChangeEvent<HTMLInputElement>) {
+  async function selectFiles(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
-    if (files.length) onUpload(files);
     event.target.value = "";
+    if (!files.length || uploading) return;
+    setUploading(true);
+    try { await onUpload(files); } finally { setUploading(false); }
   }
 
   return (
@@ -49,14 +53,14 @@ export function MediaLibrary({ assets, onUpload, persistent = false }: { assets:
       <div className="media-library__toolbar">
         <div className="media-library__filters" aria-label="Medientyp filtern">
           {(["all", "image", "video"] as const).map((option) => (
-            <button className={filter === option ? "is-active" : ""} type="button" onClick={() => setFilter(option)} key={option}>{option === "all" ? "Alle" : option === "image" ? "Bilder" : "Videos"}</button>
+            <button className={filter === option ? "is-active" : ""} type="button" aria-pressed={filter === option} onClick={() => setFilter(option)} key={option}>{option === "all" ? "Alle" : option === "image" ? "Bilder" : "Videos"}</button>
           ))}
         </div>
         <label className="media-library__search"><Search aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Material durchsuchen" aria-label="Mediathek durchsuchen" /></label>
-        <label className="button media-library__upload"><Upload aria-hidden="true" /> Material hochladen<input type="file" accept="image/*,video/*" multiple onChange={selectFiles} /></label>
+        <label className="button media-library__upload"><Upload aria-hidden="true" /> {uploading ? "Dateien werden hochgeladen …" : "Dateien hochladen"}<input type="file" accept="image/*,video/*" multiple onChange={selectFiles} disabled={uploading} aria-label="Bilder oder Videos hochladen" /></label>
       </div>
 
-      <div className="media-library__summary"><span><strong>{visibleAssets.length}</strong> Dateien sichtbar</span><span>{persistent ? "Workspace-Speicher · Uploads werden dauerhaft gespeichert" : "Demo-Speicher · Uploads bleiben bis zum Neuladen erhalten"}</span></div>
+      <div className="media-library__summary" role="status"><span><strong>{visibleAssets.length}</strong> Dateien sichtbar</span><span>{persistent ? "Dateien werden in deinem Arbeitsbereich gespeichert" : "Demo · neue Dateien bleiben bis zum Neuladen erhalten"}</span></div>
 
       {visibleAssets.length ? (
         <div className="media-library__grid">
@@ -73,13 +77,13 @@ export function MediaLibrary({ assets, onUpload, persistent = false }: { assets:
       )}
 
       {selected ? (
-        <div className="composer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
-          <section className="media-detail" role="dialog" aria-modal="true" aria-labelledby="media-detail-title">
+        <DashboardDialog labelledBy="media-detail-title" onClose={() => setSelectedId(null)}>
+          <section className="media-detail">
             <header><div><span>Medienvorschau</span><h2 id="media-detail-title">{selected.name}</h2></div><button type="button" onClick={() => setSelectedId(null)} aria-label="Vorschau schließen"><X /></button></header>
             <div className="media-detail__preview"><AssetPreview asset={selected} /></div>
             <footer><span>{selected.kind === "video" ? "Video" : "Bild"} · {formatBytes(selected.size)} · hochgeladen am {selected.uploadedAt}</span><button className="secondary-button" type="button" onClick={() => setSelectedId(null)}>Schließen</button></footer>
           </section>
-        </div>
+        </DashboardDialog>
       ) : null}
     </div>
   );

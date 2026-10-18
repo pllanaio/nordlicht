@@ -1,265 +1,94 @@
 import Image from "next/image";
 import Link from "next/link";
-import {
-  ArrowRight,
-  CalendarDays,
-  Check,
-  ChevronDown,
-  CircleCheck,
-  CloudUpload,
-  Hash,
-  Linkedin,
-  Play,
-  Sparkles,
-} from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Film, Menu, Mic, Play, Send, Sparkles, Subtitles } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { CheckoutButton } from "@/components/checkout-button";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { planCatalog, planIds } from "@/lib/plans";
 
-const pricing = [
-  {
-    name: "Starter",
-    price: "39 €",
-    features: ["1 Marke", "30 Posts/Monat", "KI-Texte mit eigenem API-Key"],
-    cta: "Starter abonnieren",
-    plan: "starter",
-  },
-  {
-    name: "Studio",
-    price: "89 €",
-    features: ["3 Marken", "Unbegrenzte Planung", "Teamfreigaben"],
-    cta: "Studio abonnieren",
-    plan: "studio",
-  },
-  {
-    name: "Pro",
-    price: "179 €",
-    features: ["10 Marken", "Trend- und Viralanalyse", "Algorithmus-Signale", "Priorisierter Support"],
-    cta: "Pro abonnieren",
-    plan: "pro",
-    featured: true,
-  },
+function VideoPreview() {
+  return (
+    <figure className="hero-video" aria-label="Beispiel für ein Kurzvideo mit Sprecherstimme und Untertiteln">
+      <div className="hero-video__screen">
+        <Image src="/media/creator-studio.webp" alt="Creatorin bei der Vorbereitung einer Videoaufnahme" width={500} height={680} priority sizes="(max-width: 600px) 75vw, 340px" />
+        <span className="hero-video__label">Beispielvorschau · 9:16</span>
+        <div className="hero-video__caption"><span>Deine nächste Geschichte</span><strong>beginnt mit einer Idee.</strong></div>
+      </div>
+      <figcaption>
+        <span className="feature-kicker">Video-Studio</span>
+        <h2>Ein Thema. Alle Schritte.</h2>
+        <ol className="hero-video__steps">
+          <li><Sparkles aria-hidden="true" /><span>Skript entwickeln</span></li>
+          <li><Mic aria-hidden="true" /><span>Sprecherstimme erzeugen</span></li>
+          <li><Film aria-hidden="true" /><span>Stockclips zusammenstellen</span></li>
+          <li><Subtitles aria-hidden="true" /><span>Untertitel hinzufügen</span></li>
+          <li><Send aria-hidden="true" /><span>Prüfen und veröffentlichen</span></li>
+        </ol>
+      </figcaption>
+    </figure>
+  );
+}
+
+const workflow = [
+  ["01", "Idee beschreiben", "Thema, Sprache und Format wählen. Ein eigenes Skript kannst du direkt mitbringen."],
+  ["02", "Video erstellen", "KI-Skript, Sprecherstimme, passende Stockclips und Untertitel ergeben dein Kurzvideo."],
+  ["03", "Ergebnis prüfen", "Video ansehen, herunterladen und gemeinsam mit deinen übrigen Medien organisieren."],
+  ["04", "Direkt posten", "Konto und Sichtbarkeit bewusst auswählen. Den Veröffentlichungsstatus siehst du am Video."],
 ];
-
-function HeroCalendar() {
-  return (
-    <div className="hero-calendar" aria-label="Vorschau des Content-Kalenders">
-      <div className="hero-calendar__toolbar">
-        <div className="hero-calendar__tabs">
-          <span>Heute</span>
-          <strong>24. – 30. Aug.</strong>
-        </div>
-        <Link href="/demo" className="mini-button">Live-Demo öffnen</Link>
-      </div>
-      <div className="hero-calendar__days" aria-hidden="true">
-        {[
-          ["Mo", "24"], ["Di", "25"], ["Mi", "26"], ["Do", "27"], ["Fr", "28"]
-        ].map(([day, date], index) => (
-          <span className={index === 2 ? "is-current" : ""} key={day}>
-            {day}<b>{date}</b>
-          </span>
-        ))}
-      </div>
-      <div className="hero-calendar__grid">
-        <div className="hero-calendar__channel">
-          <span className="channel-dot channel-dot--instagram">◎</span>
-          <span><b>Instagram</b><small>@nordlicht.studio</small></span>
-        </div>
-        <article className="hero-calendar__post hero-calendar__post--one">
-          <Image src="/media/design-studio.webp" alt="Designstudio" width={92} height={92} sizes="92px" />
-          <span><small>09:00</small><b>Behind the Scenes</b><em>Geplant</em></span>
-        </article>
-        <div className="hero-calendar__channel">
-          <span className="channel-dot channel-dot--tiktok">♪</span>
-          <span><b>TikTok</b><small>@nordlicht.studio</small></span>
-        </div>
-        <article className="hero-calendar__post hero-calendar__post--two">
-          <Image src="/media/creator-studio.webp" alt="Creatorin bei einer Aufnahme" width={92} height={92} sizes="92px" />
-          <span><small>15:30</small><b>3 Tipps für mehr Reichweite</b><em>Geplant</em></span>
-        </article>
-        <div className="hero-calendar__channel">
-          <Linkedin aria-hidden="true" size={24} />
-          <span><b>LinkedIn</b><small>Nordlicht Studio</small></span>
-        </div>
-        <article className="hero-calendar__post hero-calendar__post--three">
-          <Image src="/media/team-studio.webp" alt="Kreativteam im Studio" width={92} height={92} sizes="92px" />
-          <span><small>12:00</small><b>Team-Update</b><em>Geplant</em></span>
-        </article>
-        <div className="hero-calendar__today" aria-hidden="true"><span /></div>
-      </div>
-    </div>
-  );
-}
-
-function WorkflowSection() {
-  return (
-    <section className="workflow section" id="produkt">
-      <div className="section-heading">
-        <h2>Ein Workflow. Von Rohmaterial bis Reichweite.</h2>
-        <p>Wirf Fotos und Videos hinein. ContentDock übernimmt Struktur, Texte, Freigaben und den richtigen Zeitpunkt.</p>
-      </div>
-      <div className="workflow__rail">
-        <article className="workflow-step">
-          <header><span>01</span><h3>Sammeln</h3></header>
-          <div className="drop-preview">
-            <CloudUpload aria-hidden="true" />
-            <strong>Dateien hierher ziehen</strong>
-            <small>Bilder & Videos · bis 20 GB</small>
-            <div className="media-strip">
-              <Image src="/media/alpine-lake.webp" alt="Bergsee" width={86} height={72} sizes="86px" />
-              <Image src="/media/creator-studio.webp" alt="Creator-Studio" width={86} height={72} sizes="86px" />
-              <Image src="/media/team-studio.webp" alt="Team-Meeting" width={86} height={72} sizes="86px" />
-            </div>
-          </div>
-        </article>
-        <ArrowRight className="workflow__arrow" aria-hidden="true" />
-        <article className="workflow-step workflow-step--active">
-          <header><span>02</span><h3>Verfeinern</h3></header>
-          <div className="caption-preview">
-            <div><strong>Content Caption</strong><Sparkles aria-hidden="true" size={16} /></div>
-            <p>Neuer Look, gleiche Mission. Ein Blick hinter die Kulissen unseres heutigen Shootings.</p>
-            <div className="hashtag-label"><Hash aria-hidden="true" size={14} /> Vorschläge</div>
-            <div className="hashtag-row"><span>#behindthescenes</span><span>#contentcreation</span><span>#brandstory</span></div>
-          </div>
-        </article>
-        <ArrowRight className="workflow__arrow" aria-hidden="true" />
-        <article className="workflow-step">
-          <header><span>03</span><h3>Planen</h3></header>
-          <div className="timeline-preview">
-            <div className="timeline-preview__head"><CalendarDays size={17} aria-hidden="true" /><strong>Diese Woche</strong></div>
-            <div className="timeline-preview__line"><span>09:00</span><b>Behind the Scenes</b></div>
-            <div className="timeline-preview__line"><span>12:30</span><b>Produkt-Highlight</b></div>
-            <div className="timeline-preview__line"><span>18:00</span><b>Tutorial Clip</b></div>
-          </div>
-        </article>
-        <ArrowRight className="workflow__arrow" aria-hidden="true" />
-        <article className="workflow-step">
-          <header><span>04</span><h3>Veröffentlichen</h3></header>
-          <div className="publish-preview">
-            {["Meta", "TikTok", "YouTube", "LinkedIn"].map((network) => (
-              <div key={network}><strong>{network}</strong><span><CircleCheck size={15} aria-hidden="true" /> Geplant</span></div>
-            ))}
-          </div>
-        </article>
-      </div>
-      <div className="integration-band" id="integrationen">
-        <div className="integration-band__intro">
-          <h3>Deine Social-Kanäle.</h3>
-          <p>Verbinde die Accounts, auf denen dein Content erscheinen soll.</p>
-          <Link href="/demo">Integrationen in der Demo <ArrowRight size={17} aria-hidden="true" /></Link>
-        </div>
-        <div className="integration-list">
-          {[
-            ["Instagram", "Fotos, Reels und Insights verbinden.", "OAuth"],
-            ["TikTok", "Videos und Entwürfe sicher übergeben.", "Review"],
-            ["LinkedIn", "Beiträge für Profile und Seiten planen.", "OAuth"],
-          ].map(([name, description, status]) => (
-            <div className="integration-row" key={name}>
-              <strong>{name}</strong><span>{description}</span><em>{status}</em><ArrowRight size={16} aria-hidden="true" />
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
 
 export default function Home() {
   return (
-    <main className="landing-page">
+    <div className="landing-page">
       <header className="site-header">
         <Link href="/" aria-label="ContentDock Startseite"><BrandMark /></Link>
-        <nav aria-label="Hauptnavigation">
-          <a href="#produkt">Produkt</a>
-          <a href="#integrationen">Integrationen</a>
-          <a href="#preise">Preise</a>
-          <Link href="/trends">Trendradar</Link>
-        </nav>
+        <nav aria-label="Hauptnavigation"><a href="#produkt">Produkt</a><a href="#integrationen">Kanäle</a><a href="#preise">Tarife</a><Link href="/trends">Trendradar</Link></nav>
         <div className="site-header__actions">
-          <Link href="/login" className="text-link">Anmelden</Link>
-          <Link href="/#preise" className="button button--small">Abo wählen</Link>
+          <Link href="/login" className="text-link">Anmelden</Link><ThemeToggle />
+          <details className="site-header__mobile-menu"><summary aria-label="Navigation öffnen"><Menu aria-hidden="true" /><span>Menü</span></summary><nav aria-label="Mobile Navigation"><a href="#produkt">Produkt</a><a href="#integrationen">Kanäle</a><a href="#preise">Tarife</a><Link href="/trends">Trendradar</Link><Link href="/login">Anmelden</Link></nav></details>
         </div>
       </header>
-
-      <section className="hero section">
-        <div className="hero__copy">
-          <h1>Aus Content wird Kontinuität.</h1>
-          <p>Plane, verfeinere und veröffentliche deinen Content für alle Kanäle — in einem fokussierten Workflow.</p>
-          <div className="hero__actions">
-            <Link href="/#preise" className="button">Abo auswählen</Link>
-            <Link href="/demo" className="text-link text-link--arrow"><Play size={16} fill="currentColor" aria-hidden="true" /> Live-Demo ansehen</Link>
+      <main id="main-content" tabIndex={-1}>
+        <section className="hero section">
+          <div className="hero__copy">
+            <span className="landing-hero__eyebrow">Ein Ort für deinen Content</span>
+            <h1>Von der Idee zum fertigen Kurzvideo.</h1>
+            <p>Erstelle Videos mit KI, behalte deine Inhalte im Blick und veröffentliche auf Instagram, TikTok und YouTube.</p>
+            <div className="hero__actions"><Link href="/demo?view=video-studio" className="button"><Play size={17} aria-hidden="true" /> Demo ausprobieren</Link><a href="#produkt" className="text-link text-link--arrow">So funktioniert’s <ArrowRight size={17} aria-hidden="true" /></a></div>
+            <p className="hero__note">Kostenlose Vorschau mit Beispieldaten. Es wird nichts veröffentlicht.</p>
           </div>
-        </div>
-        <HeroCalendar />
-      </section>
-
-      <div className="logo-rail" aria-label="Unterstützte Plattformen">
-        <span>Instagram</span><span>TikTok</span><span>LinkedIn</span><span>YouTube</span>
-      </div>
-
-      <WorkflowSection />
-
-      <section className="signal-section section" id="ressourcen">
-        <div className="signal-section__visual">
-          <div className="trend-story">
-            <span>Trendradar</span>
-            <h3>Behind-the-scenes Formate gewinnen an Tempo.</h3>
-            <p>Signal aus deinen verbundenen Kanälen · letzte 7 Tage</p>
-            <div className="trend-story__line"><span /><span /><span /><span /><span /></div>
+          <VideoPreview />
+        </section>
+        <div className="logo-rail" aria-label="Videokanäle"><span>Instagram Reels</span><span>TikTok</span><span>YouTube</span></div>
+        <section className="workflow section" id="produkt" aria-labelledby="workflow-heading">
+          <div className="section-heading"><span className="feature-kicker">Vom Entwurf zur Veröffentlichung</span><h2 id="workflow-heading">Dein nächstes Video, Schritt für Schritt.</h2><p>Eine klare Abfolge mit sichtbarem Fortschritt. Du entscheidest, wann dein Video bereit für die Öffentlichkeit ist.</p></div>
+          <div className="workflow-steps">{workflow.map(([number, title, description]) => <article className="workflow-step" key={number}><header><span>{number}</span><h3>{title}</h3></header><p>{description}</p></article>)}</div>
+          <div className="integration-band" id="integrationen">
+            <div className="integration-band__intro"><h3>Drei Kanäle.<br />Eine Übersicht.</h3><p>Verbinde deine Konten und prüfe die Angaben für jeden Kanal vor dem Posten.</p><Link href="/demo?view=video-studio">Video-Studio ansehen <ArrowRight size={17} aria-hidden="true" /></Link></div>
+            <div className="integration-list">{[
+              ["Instagram", "Kurzvideos als Reels veröffentlichen.", "Professionelles Konto"],
+              ["TikTok", "Videobeitrag mit gewählter Sichtbarkeit posten.", "Freigabe erforderlich"],
+              ["YouTube", "Video hochladen und Sichtbarkeit festlegen.", "YouTube-Kanal"],
+            ].map(([name, description, requirement]) => <div className="integration-row" key={name}><strong>{name}</strong><span>{description}</span><em>{requirement}</em></div>)}</div>
           </div>
-          <div className="quality-review">
-            <span>Zielgruppenqualität</span>
-            <strong>12 Profile zur manuellen Prüfung</strong>
-            <p>Verdacht basiert auf Aktivität, Accountalter und Interaktionsmuster — nie auf Namen oder Herkunft.</p>
-          </div>
-        </div>
-        <div className="signal-section__copy">
-          <h2>Signale statt Algorithmus-Mythen.</h2>
-          <p>ContentDock verbindet deine eigenen Performance-Daten mit aktuellen Format- und Themenbewegungen. Du siehst, was sich verändert, warum es relevant sein könnte und was du als Nächstes testen kannst.</p>
-          <ul>
-            <li><Check aria-hidden="true" /> Quellen und Zeitraum pro Signal</li>
-            <li><Check aria-hidden="true" /> Vorschläge statt blindem Kopieren</li>
-            <li><Check aria-hidden="true" /> Manuelle Freigabe vor jeder Aktion</li>
-          </ul>
-          <Link href="/trends" className="text-link text-link--arrow">Öffentlichen Trendradar öffnen <ArrowRight size={17} aria-hidden="true" /></Link>
-        </div>
-      </section>
-
-      <section className="pricing section" id="preise">
-        <div className="section-heading section-heading--center">
-          <h2>Ein Plan, der mit deinem Output wächst.</h2>
-          <p>Der Workspace ist ausschließlich mit aktivem Abo nutzbar. Monatlich kündbar, ohne kostenlose Service-Nutzung.</p>
-        </div>
-        <div className="pricing__grid">
-          {pricing.map((plan) => (
-            <article className={`price-plan${plan.featured ? " price-plan--featured" : ""}`} key={plan.name}>
-              <h3>{plan.name}</h3>
-              <p><strong>{plan.price}</strong><span>/ Monat</span></p>
-              <ul>{plan.features.map((feature) => <li key={feature}>{feature}</li>)}</ul>
-              <CheckoutButton plan={plan.plan} featured={plan.featured}>{plan.cta}</CheckoutButton>
-            </article>
-          ))}
-        </div>
-        <p className="pricing__note">In der Live-Demo kannst du Accounts verbinden, Content erstellen und planen. Erst die tatsächliche Veröffentlichung benötigt ein Abo und die Publishing-Freigabe des jeweiligen Providers.</p>
-      </section>
-
-      <section className="faq section" aria-label="Häufige Fragen">
-        {[
-          ["Kann ich meinen eigenen KI-Key nutzen?", "Ja. Der Schlüssel wird nur für deine jeweilige Anfrage verwendet und im Demo-MVP nicht gespeichert."],
-          ["Welche Netzwerke werden unterstützt?", "Der MVP bereitet Meta, TikTok und LinkedIn vor. Live-Veröffentlichungen benötigen jeweils App-Review und Nutzerfreigabe."],
-          ["Kann ich monatlich kündigen?", "Ja. Die Abos sind monatlich angelegt und können zum Ende des laufenden Abrechnungszeitraums beendet werden."],
-        ].map(([question, answer]) => (
-          <details key={question}>
-            <summary>{question}<ChevronDown aria-hidden="true" /></summary>
-            <p>{answer}</p>
-          </details>
-        ))}
-      </section>
-
-      <footer className="site-footer">
-        <BrandMark inverse />
-        <nav><a href="#">Datenschutz</a><a href="#">Impressum</a><a href="#">Status</a><a href="mailto:hallo@contentdock.app">Kontakt</a></nav>
-        <strong>Mehr veröffentlichen. Weniger verwalten.</strong>
-      </footer>
-    </main>
+          <p className="launch-note">Die Veröffentlichung setzt verbundene Konten und die Freigaben der jeweiligen Plattform voraus. Welche Kanäle verfügbar sind, siehst du direkt am fertigen Video.</p>
+        </section>
+        <section className="signal-section section" id="ressourcen">
+          <div className="signal-section__visual"><div className="trend-story"><span>Inspiration</span><h3>Was möchtest du als Nächstes erzählen?</h3><p>Ein Blick hinter die Kulissen. Eine hilfreiche Antwort. Ein neuer Gedanke.</p><div className="hashtag-row"><span>#behindthescenes</span><span>#brandstory</span></div></div></div>
+          <div className="signal-section__copy"><h2>Gute Ideen beginnen mit Orientierung.</h2><p>Der Trendradar sammelt Themenbeispiele und verlinkt die Quellen der Plattformen. So findest du einen Ausgangspunkt für deinen eigenen Content.</p><ul><li><Check aria-hidden="true" /> Themen nach Plattform filtern</li><li><Check aria-hidden="true" /> Hashtags mit einem Klick kopieren</li><li><Check aria-hidden="true" /> Quellen selbst nachvollziehen</li></ul><Link href="/trends" className="text-link text-link--arrow">Trendradar öffnen <ArrowRight size={17} aria-hidden="true" /></Link></div>
+        </section>
+        <section className="pricing section" id="preise" aria-labelledby="pricing-heading">
+          <div className="section-heading section-heading--center"><span className="feature-kicker">Tarifübersicht</span><h2 id="pricing-heading">Passend zu deinem Team.</h2><p>Die aktuelle Vorabversion bietet einen ersten Zugangszeitraum von 30 Tagen. Eine automatische Verlängerung ist noch nicht verfügbar.</p></div>
+          <div className="pricing__grid">{planIds.map((id) => { const plan = planCatalog[id]; return <article className={`price-plan${id === "studio" ? " price-plan--featured" : ""}`} key={id}><h3>{plan.label}</h3><p><strong>{plan.price}</strong><span>/ erste 30 Tage</span></p><ul>{(id === "pro" ? ["10 Marken", "KI-Ideen für deine Branche", "Trendradar mit Themenbeispielen"] : plan.features).map((feature) => <li key={feature}>{feature}</li>)}</ul><CheckoutButton plan={id} featured={id === "studio"}>{plan.label} ansehen</CheckoutButton></article>; })}</div>
+          <p className="pricing__note">Für KI-Videos nutzt du deinen eigenen OpenAI-Schlüssel. Dabei fallen zusätzlich Kosten bei OpenAI an. Die Demo benötigt keinen Schlüssel.</p>
+        </section>
+        <section className="faq section" aria-labelledby="faq-heading"><h2 id="faq-heading">Gut zu wissen</h2>{[
+          ["Was kann ich in der Demo ausprobieren?", "Navigation, Planung und die Eingaben im Video-Studio. Die Demo zeigt Beispieldaten. Sie erstellt keine echten Videos und veröffentlicht keine Beiträge."],
+          ["Wie wird mein KI-Schlüssel verwendet?", "Für Textanfragen wird er direkt verwendet. Bei Videoaufträgen wird er mit deiner Einwilligung vorübergehend verschlüsselt gespeichert. Er wird nach Abschluss entfernt und kann höchstens eine Stunde für den Auftrag verwendet werden."],
+          ["Wird mein Video automatisch veröffentlicht?", "Du wählst am fertigen Video den Kanal und die Veröffentlichungsoptionen aus und bestätigst den Auftrag. Der Status zeigt, ob der Kanal den Beitrag noch verarbeitet oder bereits veröffentlicht hat."],
+          ["Ist ContentDock bereits vollständig verfügbar?", "ContentDock ist in der Vorabversion. Videos und Direktveröffentlichung benötigen freigeschaltete Dienste und verbundene Konten. Reguläre Kundenanmeldung und automatische Aboverlängerung sind noch nicht verfügbar."],
+        ].map(([question, answer]) => <details key={question}><summary>{question}<ChevronDown aria-hidden="true" /></summary><p>{answer}</p></details>)}</section>
+      </main>
+      <footer className="site-footer"><BrandMark inverse /><nav aria-label="Weitere Seiten"><Link href="/demo">Demo</Link><Link href="/trends">Trendradar</Link><Link href="/login">Anmelden</Link></nav><strong>Raum für deine nächste Idee.</strong></footer>
+    </div>
   );
 }

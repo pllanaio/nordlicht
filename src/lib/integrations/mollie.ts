@@ -8,6 +8,9 @@ type MollieCustomer = { id: string };
 export type MolliePayment = {
   id: string;
   status: string;
+  paidAt?: string;
+  amountRefunded?: { value: string };
+  amountChargedBack?: { value: string };
   customerId?: string;
   metadata?: { plan?: string; customerId?: string; userEmail?: string; userName?: string };
   _links?: { checkout?: { href?: string } };
@@ -25,7 +28,7 @@ async function mollieFetch<T>(path: string, init?: RequestInit): Promise<T> {
     },
     signal: AbortSignal.timeout(20_000),
   });
-  if (!response.ok) throw new Error(`Mollie ${response.status}: ${(await response.text()).slice(0, 400)}`);
+  if (!response.ok) throw new Error(`Mollie request failed (${response.status})`);
   return response.json() as Promise<T>;
 }
 

@@ -20,7 +20,7 @@ export async function getSocialConnectorCards(storage: { mode: "demo" } | { mode
       description: provider.description,
       docsUrl: provider.docsUrl,
       configured: provider.isConfigured() && secureFlowConfigured,
-      publishingReady: Boolean(connection && publishingScopes.every((scope) => connection.scopes.includes(scope))),
+      publishingReady: Boolean(connection && (!connection.tokenExpiresAt || Date.parse(connection.tokenExpiresAt) > Date.now()) && publishingScopes.every((scope) => connection.scopes.includes(scope))),
       connection,
     };
   });

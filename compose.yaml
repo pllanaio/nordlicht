@@ -35,6 +35,12 @@ services:
       OAUTH_STATE_SECRET: "${OAUTH_STATE_SECRET:-}"
       SOCIAL_TOKEN_ENCRYPTION_KEY: "${SOCIAL_TOKEN_ENCRYPTION_KEY:-}"
       WORKSPACE_DATA_ENCRYPTION_KEY: "${WORKSPACE_DATA_ENCRYPTION_KEY:-}"
+      VIDEO_GENERATION_ENABLED: "${VIDEO_GENERATION_ENABLED:-false}"
+      PUBLISHING_ENABLED: "${PUBLISHING_ENABLED:-false}"
+      PUBLISHING_MEDIA_SECRET: "${PUBLISHING_MEDIA_SECRET:-}"
+      MEDIA_DELIVERY_URL: "${MEDIA_DELIVERY_URL:-}"
+      YOUTUBE_CLIENT_ID: "${YOUTUBE_CLIENT_ID:-}"
+      YOUTUBE_CLIENT_SECRET: "${YOUTUBE_CLIENT_SECRET:-}"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -44,6 +50,102 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
+
+  video-worker:
+    profiles: ["video"]
+    build:
+      context: .
+      dockerfile: Dockerfile.video-worker
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp:size=1536m,mode=1777
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 128
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      NODE_ENV: production
+      PGHOST: database
+      PGPORT: "5432"
+      PGDATABASE: "${POSTGRES_DB:-contentdock}"
+      PGUSER: "${POSTGRES_APP_USER:-contentdock_app}"
+      PGPASSWORD: "${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env.docker}"
+      VIDEO_GENERATION_ENABLED: "${VIDEO_GENERATION_ENABLED:-false}"
+      PEXELS_API_KEY: "${PEXELS_API_KEY:-}"
+      WORKSPACE_DATA_ENCRYPTION_KEY: "${WORKSPACE_DATA_ENCRYPTION_KEY:-}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  publishing-worker:
+    profiles: ["publishing"]
+    build:
+      context: .
+      dockerfile: Dockerfile.publishing-worker
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    mem_limit: 1g
+    cpus: 1
+    pids_limit: 64
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      NODE_ENV: production
+      PGHOST: database
+      PGPORT: "5432"
+      PGDATABASE: "${POSTGRES_DB:-contentdock}"
+      PGUSER: "${POSTGRES_APP_USER:-contentdock_app}"
+      PGPASSWORD: "${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env.docker}"
+      PUBLISHING_ENABLED: "${PUBLISHING_ENABLED:-false}"
+      APP_URL: "${APP_URL:-http://localhost:3000}"
+      SOCIAL_TOKEN_ENCRYPTION_KEY: "${SOCIAL_TOKEN_ENCRYPTION_KEY:-}"
+      PUBLISHING_MEDIA_SECRET: "${PUBLISHING_MEDIA_SECRET:-}"
+      MEDIA_DELIVERY_URL: "${MEDIA_DELIVERY_URL:-}"
+      META_GRAPH_VERSION: "${META_GRAPH_VERSION:-v23.0}"
+      TIKTOK_CLIENT_KEY: "${TIKTOK_CLIENT_KEY:-}"
+      TIKTOK_CLIENT_SECRET: "${TIKTOK_CLIENT_SECRET:-}"
+      YOUTUBE_CLIENT_ID: "${YOUTUBE_CLIENT_ID:-}"
+      YOUTUBE_CLIENT_SECRET: "${YOUTUBE_CLIENT_SECRET:-}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  media-server:
+    profiles: ["media"]
+    build:
+      context: .
+      dockerfile: Dockerfile.media-server
+    init: true
+    restart: unless-stopped
+    stop_grace_period: 30s
+    read_only: true
+    mem_limit: 256m
+    cpus: 1
+    pids_limit: 64
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    ports:
+      - "127.0.0.1:${MEDIA_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      PGHOST: database
+      PGPORT: "5432"
+      PGDATABASE: "${POSTGRES_DB:-contentdock}"
+      PGUSER: "${POSTGRES_APP_USER:-contentdock_app}"
+      PGPASSWORD: "${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env.docker}"
+      PUBLISHING_MEDIA_SECRET: "${PUBLISHING_MEDIA_SECRET:-}"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   database:
     image: postgres:16-alpine

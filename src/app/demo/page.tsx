@@ -10,6 +10,7 @@ const demoViewByQuery: Record<string, DashboardView> = {
   organisation: "Organisation",
   mediathek: "Mediathek",
   "ki-studio": "KI-Studio",
+  "video-studio": "Video-Studio",
   trends: "Trends",
   integrations: "Integrationen",
   abrechnung: "Abrechnung",

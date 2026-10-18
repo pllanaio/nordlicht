@@ -4,6 +4,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { isPlanId, type PlanId } from "@/lib/plans";
+import { getMolliePayment } from "@/lib/integrations/mollie";
+import { firstPaymentAccessUntil } from "@/lib/billing-policy";
 
 export const subscriptionCookieName = "contentdock_subscription";
 
@@ -14,6 +16,7 @@ export type SubscriptionEntitlement = {
   source: "mollie" | "internal-test";
   displayName?: string;
   email?: string;
+  accessUntil?: number;
 };
 
 function getSigningSecret() {
@@ -34,14 +37,18 @@ function signaturesMatch(expected: string, actual: string) {
 }
 
 export function createCheckoutState(paymentId: string) {
-  const signature = sign(`checkout:${paymentId}`);
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000;
+  const signature = sign(`checkout:${paymentId}:${expiresAt}`);
   if (!signature) throw new Error("SUBSCRIPTION_SESSION_SECRET is not configured");
-  return signature;
+  return `${expiresAt}.${signature}`;
 }
 
 export function verifyCheckoutState(paymentId: string, state: string) {
-  const expected = sign(`checkout:${paymentId}`);
-  return Boolean(expected && signaturesMatch(expected, state));
+  const [expiry, signature, extra] = state.split(".");
+  const expiresAt = Number(expiry);
+  if (!signature || extra || !Number.isSafeInteger(expiresAt) || expiresAt <= Date.now() || expiresAt > Date.now() + 24 * 60 * 60 * 1000) return false;
+  const expected = sign(`checkout:${paymentId}:${expiry}`);
+  return Boolean(expected && signaturesMatch(expected, signature));
 }
 
 export function createSubscriptionToken(input: {
@@ -50,16 +57,18 @@ export function createSubscriptionToken(input: {
   source?: SubscriptionEntitlement["source"];
   displayName?: string;
   email?: string;
+  accessUntil?: number;
 }) {
   if (!isPlanId(input.plan)) throw new Error("Unknown subscription plan");
 
   const entitlement: SubscriptionEntitlement = {
     paymentId: input.paymentId,
     plan: input.plan,
-    expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    expiresAt: Math.min(Date.now() + 24 * 60 * 60 * 1000, input.accessUntil ?? Number.POSITIVE_INFINITY),
     source: input.source ?? "mollie",
     displayName: input.displayName?.slice(0, 80),
     email: input.email?.trim().toLocaleLowerCase("en-US").slice(0, 254),
+    accessUntil: input.accessUntil,
   };
   const payload = Buffer.from(JSON.stringify(entitlement)).toString("base64url");
   const signature = sign(`entitlement:${payload}`);
@@ -68,8 +77,8 @@ export function createSubscriptionToken(input: {
 }
 
 function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null {
-  const [payload, signature] = token.split(".");
-  if (!payload || !signature) return null;
+  const [payload, signature, extra] = token.split(".");
+  if (!payload || !signature || extra || token.length > 8192) return null;
 
   const expected = sign(`entitlement:${payload}`);
   if (!expected || !signaturesMatch(expected, signature)) return null;
@@ -81,10 +90,12 @@ function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null 
       typeof entitlement.paymentId !== "string" ||
       !isPlanId(entitlement.plan) ||
       typeof entitlement.expiresAt !== "number" ||
+      !Number.isFinite(entitlement.expiresAt) ||
       entitlement.expiresAt <= Date.now() ||
       (source !== "mollie" && source !== "internal-test") ||
       (entitlement.displayName !== undefined && typeof entitlement.displayName !== "string") ||
       (entitlement.email !== undefined && typeof entitlement.email !== "string")
+      || (entitlement.accessUntil !== undefined && (typeof entitlement.accessUntil !== "number" || !Number.isFinite(entitlement.accessUntil) || entitlement.accessUntil <= Date.now()))
     ) {
       return null;
     }
@@ -95,6 +106,7 @@ function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null 
       source,
       displayName: entitlement.displayName,
       email: entitlement.email,
+      accessUntil: entitlement.accessUntil,
     };
   } catch {
     return null;
@@ -103,7 +115,17 @@ function decodeSubscriptionToken(token: string): SubscriptionEntitlement | null 
 
 export async function getSubscriptionEntitlement() {
   const token = (await cookies()).get(subscriptionCookieName)?.value;
-  return token ? decodeSubscriptionToken(token) : null;
+  const entitlement = token ? decodeSubscriptionToken(token) : null;
+  if (!entitlement || entitlement.source === "internal-test") return entitlement;
+  try {
+    // The receipt and cookie alone are insufficient after a refund or chargeback.
+    const payment = await getMolliePayment(entitlement.paymentId);
+    const accessUntil = firstPaymentAccessUntil(payment);
+    if (!accessUntil || payment.metadata?.plan !== entitlement.plan) return null;
+    return { ...entitlement, accessUntil, expiresAt: Math.min(entitlement.expiresAt, accessUntil) };
+  } catch {
+    return null;
+  }
 }
 
 export async function requireActiveSubscription() {

@@ -58,8 +58,8 @@ function expiresAtFromSeconds(expiresIn?: number) {
   return typeof expiresIn === "number" ? new Date(Date.now() + expiresIn * 1_000).toISOString() : undefined;
 }
 
-function parseScopes(scope: string | undefined, fallback: string[]) {
-  if (!scope) return fallback;
+function parseScopes(scope: string | undefined) {
+  if (!scope) return [];
   return scope.split(/[\s,]+/).map((item) => item.trim()).filter(Boolean);
 }
 
@@ -83,7 +83,7 @@ const instagram: OAuthProvider = {
     url.searchParams.set("force_authentication", "1");
     return url;
   },
-  async exchangeCode({ code, redirectUri, requestedScopes }) {
+  async exchangeCode({ code, redirectUri }) {
     const body = new URLSearchParams({
       client_id: process.env.META_APP_ID!,
       client_secret: process.env.META_APP_SECRET!,
@@ -115,7 +115,13 @@ const instagram: OAuthProvider = {
     return {
       accessToken,
       expiresAt: expiresAtFromSeconds(longLived.expires_in),
-      scopes: requestedScopes,
+      scopes: await (async () => {
+        const permissionsResponse = await fetch("https://graph.instagram.com/me/permissions", {
+          headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(requestTimeoutMs),
+        });
+        const permissions = await readJson<{ data?: { permission: string; status: string }[] }>(permissionsResponse, "Instagram permissions could not be verified");
+        return (permissions.data ?? []).filter((item) => item.status === "granted").map((item) => item.permission);
+      })(),
     };
   },
   async getProfile(accessToken) {
@@ -162,7 +168,7 @@ const linkedin: OAuthProvider = {
     url.searchParams.set("state", state);
     return url;
   },
-  async exchangeCode({ code, redirectUri, requestedScopes }) {
+  async exchangeCode({ code, redirectUri }) {
     const body = new URLSearchParams({
       grant_type: "authorization_code",
       code,
@@ -182,7 +188,7 @@ const linkedin: OAuthProvider = {
       accessToken: requireAccessToken(data, "LinkedIn returned no access token"),
       refreshToken: data.refresh_token,
       expiresAt: expiresAtFromSeconds(data.expires_in),
-      scopes: parseScopes(data.scope, requestedScopes),
+      scopes: parseScopes(data.scope),
     };
   },
   async getProfile(accessToken) {
@@ -220,7 +226,7 @@ const tiktok: OAuthProvider = {
     url.searchParams.set("state", state);
     return url;
   },
-  async exchangeCode({ code, redirectUri, requestedScopes }) {
+  async exchangeCode({ code, redirectUri }) {
     const body = new URLSearchParams({
       client_key: process.env.TIKTOK_CLIENT_KEY!,
       client_secret: process.env.TIKTOK_CLIENT_SECRET!,
@@ -240,7 +246,7 @@ const tiktok: OAuthProvider = {
       accessToken: requireAccessToken(data, "TikTok returned no access token"),
       refreshToken: data.refresh_token,
       expiresAt: expiresAtFromSeconds(data.expires_in),
-      scopes: parseScopes(data.scope, requestedScopes),
+      scopes: parseScopes(data.scope),
     };
   },
   async getProfile(accessToken) {
@@ -265,7 +271,41 @@ const tiktok: OAuthProvider = {
   },
 };
 
-const providers: Record<SocialProviderId, OAuthProvider> = { instagram, linkedin, tiktok };
+const youtube: OAuthProvider = {
+  id: "youtube", label: "YouTube", description: "YouTube-Kanal für Videos und Shorts verbinden.",
+  docsUrl: "https://developers.google.com/youtube/v3/guides/auth/server-side-web-apps",
+  identityScopes: ["https://www.googleapis.com/auth/youtube.readonly"],
+  publishingScopes: ["https://www.googleapis.com/auth/youtube.upload"],
+  isConfigured() { return Boolean(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET); },
+  createAuthorizationUrl({ redirectUri, state, scopes }) {
+    const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
+    for (const [key, value] of Object.entries({ client_id: process.env.YOUTUBE_CLIENT_ID!, redirect_uri: redirectUri,
+      response_type: "code", scope: scopes.join(" "), state, access_type: "offline", prompt: "consent", include_granted_scopes: "true" })) url.searchParams.set(key, value);
+    return url;
+  },
+  async exchangeCode({ code, redirectUri }) {
+    const response = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ code, client_id: process.env.YOUTUBE_CLIENT_ID!, client_secret: process.env.YOUTUBE_CLIENT_SECRET!,
+        redirect_uri: redirectUri, grant_type: "authorization_code" }),
+      cache: "no-store", signal: AbortSignal.timeout(requestTimeoutMs),
+    });
+    const data = await readJson<TokenResponse>(response, "YouTube token exchange failed");
+    return { accessToken: requireAccessToken(data, "YouTube returned no access token"), refreshToken: data.refresh_token,
+      expiresAt: expiresAtFromSeconds(data.expires_in), scopes: parseScopes(data.scope) };
+  },
+  async getProfile(accessToken) {
+    const response = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", {
+      headers: { Authorization: `Bearer ${accessToken}` }, cache: "no-store", signal: AbortSignal.timeout(requestTimeoutMs),
+    });
+    const data = await readJson<{ items?: { id: string; snippet?: { title?: string; thumbnails?: { default?: { url?: string } } } }[] }>(response, "YouTube channel lookup failed");
+    const channel = data.items?.[0];
+    if (!channel?.id) throw new Error("Create a YouTube channel before connecting");
+    return { accountId: channel.id, displayName: channel.snippet?.title || "YouTube", profileImageUrl: channel.snippet?.thumbnails?.default?.url };
+  },
+};
+
+const providers: Record<SocialProviderId, OAuthProvider> = { instagram, linkedin, tiktok, youtube };
 
 export const socialProviderIds = Object.freeze(Object.keys(providers) as SocialProviderId[]);
 

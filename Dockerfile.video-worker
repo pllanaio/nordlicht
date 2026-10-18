@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y ffmpeg fonts-dejavu-core ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --chown=node:node scripts/video ./scripts/video
+COPY --chown=node:node scripts/video-worker.mjs ./scripts/video-worker.mjs
+
+USER node
+CMD ["node", "scripts/video-worker.mjs"]

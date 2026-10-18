@@ -17,6 +17,16 @@ type StoredSocialConnection = SocialConnectionSummary & {
   refreshToken?: string;
 };
 
+function summary(connection: StoredSocialConnection): SocialConnectionSummary {
+  return { provider: connection.provider, accountId: connection.accountId, displayName: connection.displayName,
+    profileImageUrl: connection.profileImageUrl, scopes: [...connection.scopes], connectedAt: connection.connectedAt,
+    tokenExpiresAt: connection.tokenExpiresAt };
+}
+
+function requireConnectionAdmin(role: string) {
+  if (role !== "owner" && role !== "admin") throw new Error("Only workspace administrators may manage social connections");
+}
+
 function connectionCookieName(provider: SocialProviderId) {
   return `${cookiePrefix}${provider}`;
 }
@@ -110,6 +120,9 @@ export async function saveSocialConnection(
   try {
     await client.query("begin");
     const context = await ensureWorkspaceContext(client, storage.entitlement);
+    const current = await client.query<{ role: string }>(`select wm.role from workspace_member wm join workspace w on w.id = wm.workspace_id
+      where wm.workspace_id = $1 and wm.user_id = $2 for share of w, wm`, [context.workspaceId, context.userId]);
+    requireConnectionAdmin(current.rows[0]?.role ?? "");
     await client.query(
       `insert into social_connection
         (workspace_id, provider, provider_account_id, display_name, profile_image_url,
@@ -142,7 +155,8 @@ export async function getSocialConnection(provider: SocialProviderId, storage: {
     return connections.get(provider) ?? null;
   }
   const value = (await cookies()).get(connectionCookieName(provider))?.value;
-  return value ? decrypt(value) : null;
+  const connection = value ? decrypt(value) : null;
+  return connection ? summary(connection) : null;
 }
 
 export async function getSocialConnectionSummaries(
@@ -155,7 +169,7 @@ export async function getSocialConnectionSummaries(
     for (const provider of providers) {
       const value = cookieStore.get(connectionCookieName(provider))?.value;
       const connection = value ? decrypt(value) : null;
-      if (connection) summaries.set(provider, connection);
+      if (connection) summaries.set(provider, summary(connection));
     }
     return summaries;
   }
@@ -172,7 +186,7 @@ export async function getSocialConnectionSummaries(
     await client.query("commit");
     for (const row of result.rows) {
       const connection = decrypt(row.encryptedConnection.toString("utf8"));
-      if (connection) summaries.set(row.provider, connection);
+      if (connection) summaries.set(row.provider, summary(connection));
     }
     return summaries;
   } catch (cause) {
@@ -192,6 +206,9 @@ export async function deleteSocialConnection(provider: SocialProviderId, storage
   try {
     await client.query("begin");
     const context = await ensureWorkspaceContext(client, storage.entitlement);
+    const current = await client.query<{ role: string }>(`select wm.role from workspace_member wm join workspace w on w.id = wm.workspace_id
+      where wm.workspace_id = $1 and wm.user_id = $2 for share of w, wm`, [context.workspaceId, context.userId]);
+    requireConnectionAdmin(current.rows[0]?.role ?? "");
     await client.query("delete from social_connection where workspace_id = $1 and provider = $2", [context.workspaceId, provider]);
     await client.query("commit");
   } catch (cause) {

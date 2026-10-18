@@ -19,6 +19,9 @@ export async function PUT(request: Request) {
     }
     return NextResponse.json({ saved: true, revision: result.revision });
   } catch (cause) {
+    if (cause && typeof cause === "object" && "code" in cause && cause.code === "workspace_forbidden") {
+      return NextResponse.json({ error: "Deine Rolle darf diese Workspace-Daten nicht verändern." }, { status: 403 });
+    }
     const duplicateEmail = Boolean(cause && typeof cause === "object" && "code" in cause && cause.code === "23505");
     console.error("Workspace persistence failed", cause instanceof Error ? cause.message : "Unknown workspace error");
     return NextResponse.json(
