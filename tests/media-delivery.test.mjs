@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 import { createMediaServer } from '../scripts/media-server.mjs';
 import { assetSignature, publicationSignature, signedAssetUrl, verifyAssetSignature, getMediaDeliveryOrigin, parseRange } from '../src/lib/media-delivery/core.mjs';
@@ -33,7 +34,12 @@ test('range parsing rejects invalid/multiple/unsafe ranges and supports suffix',
 });
 
 test('HTTP media service streams real PostgreSQL media with scoped access', { skip: !process.env.PUBLISHING_TEST_DATABASE_URL }, async t => {
-  const pool = new pg.Pool({ connectionString: process.env.PUBLISHING_TEST_DATABASE_URL, max: 4 });
+  const connectionString = process.env.PUBLISHING_TEST_DATABASE_URL;
+  assert.ok(['localhost', '127.0.0.1'].includes(new URL(connectionString).hostname), 'Use a local fixture database only');
+  const schema = `media_test_${randomUUID().replaceAll('-', '')}`;
+  const admin = new pg.Client({ connectionString });
+  await admin.connect();
+  const pool = new pg.Pool({ connectionString, max: 4, options: `-c search_path=${schema}` });
   const user = randomUUID(), workspaceId = randomUUID(), assetId = randomUUID(), videoId = randomUUID(), publicationId = randomUUID();
   const bytes = Buffer.alloc(6 * 1024 * 1024, 119); bytes[262144] = 23; bytes[bytes.length - 1] = 8;
   let queries = 0, active = 0, maxChunk = 0;
@@ -51,6 +57,10 @@ test('HTTP media service streams real PostgreSQL media with scoped access', { sk
   };
   const publicationUrl = () => { const expires = Math.floor(Date.now() / 1000) + 3600; return `${origin}/api/publishing/media/${publicationId}?expires=${expires}&signature=${publicationSignature(publicationId, expires, env)}`; };
   try {
+    await admin.query(`create schema ${schema}`);
+    for (const file of ['001_initial.sql', '002_video_jobs.sql', '003_video_publications.sql']) {
+      await pool.query(await readFile(new URL(`../database/migrations/${file}`, import.meta.url), 'utf8'));
+    }
     await pool.query("insert into workspace(id,name,slug) values($1::uuid,'Media test',$1::text)", [workspaceId]);
     await pool.query("insert into app_user(id,external_auth_id,email,display_name,first_name,last_name) values($1::uuid,$1::text,$2,'Media','Media','Test')", [user, `${user}@example.invalid`]);
     await pool.query("insert into media_asset(id,workspace_id,storage_key,name,content_type,content,bytes,checksum_sha256,created_by) values($1::uuid,$2,$1::text,'Video','video/mp4',$3,$4,'test',$5)", [assetId, workspaceId, bytes, bytes.length, user]);
@@ -89,7 +99,9 @@ test('HTTP media service streams real PostgreSQL media with scoped access', { sk
   } finally {
     server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
     for (let i = 0; i < 50 && active > 0; i++) await new Promise(resolve => setTimeout(resolve, 10));
-    await pool.query('delete from workspace where id=$1', [workspaceId]); await pool.query('delete from app_user where id=$1', [user]); await pool.end();
+    await pool.end();
+    try { await admin.query(`drop schema if exists ${schema} cascade`); }
+    finally { await admin.end(); }
   }
 });
 
