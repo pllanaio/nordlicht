@@ -1,0 +1,11 @@
+FROM node:24-bookworm-slim
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --chown=node:node package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+COPY --chown=node:node scripts/publishing ./scripts/publishing
+COPY --chown=node:node scripts/publishing-worker.mjs ./scripts/publishing-worker.mjs
+COPY --chown=node:node src/lib/publishing/core.mjs ./src/lib/publishing/core.mjs
+COPY --chown=node:node src/lib/media-delivery/core.mjs ./src/lib/media-delivery/core.mjs
+USER node
+CMD ["node", "scripts/publishing-worker.mjs"]

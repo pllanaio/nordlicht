@@ -87,8 +87,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       tokens,
       oauthState.mode === "demo" ? { mode: "demo" } : { mode: "workspace", entitlement: workspaceEntitlement! },
     );
-  } catch (error) {
-    console.error(`OAuth callback failed for ${providerParam}`, error instanceof Error ? error.message : "Unknown error");
+  } catch {
+    console.error(`OAuth callback failed for ${providerParam}`);
     return connectorRedirect(request, oauthState.mode, providerParam, "failed");
   }
 

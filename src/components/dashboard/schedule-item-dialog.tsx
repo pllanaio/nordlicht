@@ -1,14 +1,16 @@
 "use client";
 
 import Image from "next/image";
+import { DashboardDialog } from "@/components/dashboard/dashboard-dialog";
 import { useState } from "react";
-import { CalendarDays, Check, Clock3, Trash2, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, FileImage, Trash2, X } from "lucide-react";
 import type { Channel, ScheduleItem, ScheduleStatus } from "@/lib/data";
 
 const channels: Channel[] = ["Instagram", "TikTok", "LinkedIn", "YouTube"];
 const statuses: ScheduleStatus[] = ["Entwurf", "Freigabe", "Geplant"];
 
 function formatLongDate(date: string) {
+  if (!date || Number.isNaN(new Date(`${date}T12:00:00`).getTime())) return "Datum auswählen";
   return new Intl.DateTimeFormat("de-DE", {
     weekday: "long",
     day: "2-digit",
@@ -53,11 +55,11 @@ export function ScheduleItemDialog({
   }
 
   return (
-    <div className="composer-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <form className="post-dialog" role="dialog" aria-modal="true" aria-labelledby="post-dialog-title" onSubmit={save}>
+    <DashboardDialog labelledBy="post-dialog-title" onClose={onClose}>
+      <form className="post-dialog" onSubmit={save}>
         <header className="post-dialog__header">
           <div>
-            <span>Post-Details</span>
+            <span>Beitragsdetails</span>
             <h2 id="post-dialog-title">Beitrag bearbeiten</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Dialog schließen"><X /></button>
@@ -65,7 +67,7 @@ export function ScheduleItemDialog({
 
         <div className="post-dialog__body">
           <aside className="post-dialog__preview">
-            <Image src={item.image} alt={`Vorschau für ${item.title}`} width={260} height={300} sizes="260px" />
+            {item.image ? <Image unoptimized={item.image.startsWith("/api/") || item.image.startsWith("blob:")} src={item.image} alt={`Beitragsbild für ${item.title}`} width={260} height={300} sizes="260px" /> : <span className="media-placeholder"><FileImage aria-hidden="true" /> Kein Bild hinzugefügt</span>}
             <div>
               <span><CalendarDays aria-hidden="true" /> {formatLongDate(date)}</span>
               <span><Clock3 aria-hidden="true" /> {time} Uhr</span>
@@ -73,14 +75,16 @@ export function ScheduleItemDialog({
           </aside>
 
           <div className="post-dialog__fields">
-            <label className="composer-field">Titel<input value={title} onChange={(event) => setTitle(event.target.value)} required /></label>
-            <label className="composer-field">Caption<textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={5} /></label>
+            <p>Alle Angaben außer dem Beitragstext sind Pflichtfelder.</p>
+            <label className="composer-field">Titel<input value={title} onChange={(event) => setTitle(event.target.value)} required maxLength={200} /></label>
+            <label className="composer-field">Beitragstext (optional)<textarea value={caption} onChange={(event) => setCaption(event.target.value)} rows={5} /></label>
             <div className="post-dialog__field-grid">
               <label className="composer-field">Kanal<select value={channel} onChange={(event) => setChannel(event.target.value as Channel)}>{channels.map((option) => <option key={option}>{option}</option>)}</select></label>
               <label className="composer-field">Status<select value={status} onChange={(event) => setStatus(event.target.value as ScheduleStatus)}>{statuses.map((option) => <option key={option}>{option}</option>)}</select></label>
               <label className="composer-field">Datum<input type="date" value={date} onChange={(event) => setDate(event.target.value)} required /></label>
               <label className="composer-field">Uhrzeit<input type="time" value={time} onChange={(event) => setTime(event.target.value)} required /></label>
             </div>
+            <p className="composer-plan__notice">„Geplant“ hält deinen Wunschtermin fest. Der Kalender veröffentlicht keine Beiträge automatisch.</p>
           </div>
         </div>
 
@@ -95,6 +99,6 @@ export function ScheduleItemDialog({
           <div><button className="secondary-button" type="button" onClick={onClose}>Schließen</button><button className="button" type="submit" disabled={!valid}>Änderungen speichern <Check size={17} aria-hidden="true" /></button></div>
         </footer>
       </form>
-    </div>
+    </DashboardDialog>
   );
 }

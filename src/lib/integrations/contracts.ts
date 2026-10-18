@@ -1,6 +1,6 @@
 export type ConnectorState = "ready" | "configuration_required" | "review_required" | "handoff_only";
 
-export type SocialProviderId = "instagram" | "linkedin" | "tiktok";
+export type SocialProviderId = "instagram" | "linkedin" | "tiktok" | "youtube";
 
 export type SocialConnectionSummary = {
   provider: SocialProviderId;

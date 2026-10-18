@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { Client } from "pg";
 
 const migrationsDirectory = join(process.cwd(), "database", "migrations");
-const client = new Client({ application_name: "contentdock-migrations", connectionTimeoutMillis: 10_000 });
+const client = new Client({
+  connectionString: process.env.DATABASE_URL,
+  application_name: "contentdock-migrations",
+  connectionTimeoutMillis: 10_000,
+});
 
 try {
   await client.connect();

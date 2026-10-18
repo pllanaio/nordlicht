@@ -40,6 +40,15 @@ export async function POST(request: Request) {
   try {
     await client.query("begin");
     const context = await ensureWorkspaceContext(client, entitlement);
+    const membership = await client.query<{ role: string }>(
+      `select wm.role from workspace_member wm join workspace w on w.id = wm.workspace_id
+        where wm.workspace_id = $1 and wm.user_id = $2 for share of w, wm`,
+      [context.workspaceId, context.userId],
+    );
+    if (!membership.rows[0] || membership.rows[0].role === "reviewer") {
+      await client.query("rollback");
+      return NextResponse.json({ error: "Du darfst keine Medien in diesen Workspace hochladen." }, { status: 403 });
+    }
     const assets: MediaAsset[] = [];
     for (const file of files) {
       const content = Buffer.from(await file.arrayBuffer());

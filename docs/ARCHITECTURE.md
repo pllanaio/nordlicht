@@ -1,120 +1,73 @@
 # ContentDock Architektur
 
-## Zugriff und Abonnement
+Stand: 18. Oktober 2026. Diese Beschreibung unterscheidet den implementierten Ablauf von noch ausstehenden Produktionsfunktionen.
 
-- `/demo` ist öffentlich und interaktiv; nur Publish-Aufrufe bleiben gesperrt.
-- `/dashboard` prüft die Abo-Berechtigung in einer Server Component vor dem Rendern.
-- Mutierende Route Handler wie `/api/ai/caption` und `/api/workspace/*` prüfen dieselbe Berechtigung erneut.
-- Der Abo-Subject wird serverseitig einem stabilen `app_user`, `workspace` und `workspace_member` zugeordnet.
-- Demo-Zustand bleibt cookiebasiert und wird niemals in Mandantentabellen geschrieben.
-- Mollie-Redirects allein schalten nichts frei. `/api/mollie/confirm` lädt den autoritativen Zahlungsstatus und akzeptiert ausschließlich `paid`.
-- Die HTTP-only-Berechtigung ist HMAC-signiert und auf 24 Stunden begrenzt. Für Produktion wird sie durch eine Datenbank-Session ersetzt, deren Subscription-Status über idempotente Webhooks aktualisiert wird.
+## Zugriff und Speicherung
 
-## Zielbild
+Die öffentliche Demo hält Beispieldaten im Browser und führt keine Videoaufträge oder Veröffentlichungen aus. Im Dashboard prüfen Server Components und APIs eine signierte, zeitlich begrenzte Berechtigung. Ein authentifizierter Subject wird einem `app_user`, `workspace` und `workspace_member` zugeordnet. Rollen sind `owner`, `admin`, `editor`, `reviewer`; Schreibpfade prüfen die aktuelle Mitgliedschaft in ihrer Transaktion.
 
-ContentDock trennt Produktoberfläche, Domänenlogik und Provider-Zugriffe. Die Web-App darf weiterentwickelt und getestet werden, auch wenn einzelne Plattform-Reviews noch ausstehen.
+PostgreSQL speichert Workspace-Daten, Medien, verschlüsselte Provider-Verbindungen und dauerhafte Aufträge. Jede fachliche Abfrage bindet ihre Ressourcen an den Workspace. Row Level Security ist keine aktuell implementierte zusätzliche Schutzschicht. Die neue Funktionsprüfung und der unvollständige Audit sind in [SECURITY-REVIEW.md](SECURITY-REVIEW.md) beschrieben.
+
+## Video und Veröffentlichung
 
 ```mermaid
-flowchart TD
-  UI["Next.js Web-App"] --> API["Route Handler / Server Actions"]
-  API --> Domain["Content-, Billing- und Signal-Domäne"]
-  Domain --> DB[("PostgreSQL")]
-  Domain --> Queue["Publish Queue"]
-  Queue --> Adapters["Provider-Adapter"]
-  Adapters --> Social["Meta / TikTok"]
-  Adapters --> Business["Mollie / Odoo"]
+flowchart LR
+  UI[Next.js Dashboard] --> API[Authentifizierte APIs]
+  API --> DB[(PostgreSQL)]
+  DB --> VW[Video-Worker]
+  VW --> AI[OpenAI: Skript / Stimme / Zeitstempel]
+  VW --> Stock[Pexels-Clips]
+  VW --> Render[FFmpeg]
+  Render --> DB
+  UI --> Confirm[Vorschau und Bestätigung je Kanal]
+  Confirm --> API
+  DB --> PW[Publishing-Worker]
+  PW --> Social[Instagram / TikTok / YouTube]
+  DB --> Media[Streaming-Mediendienst]
+  Media --> UI
+  Media --> Instagram[Instagram-Medienabruf]
 ```
 
-## Domänenmodule
+`video_job` führt Thema oder Sprechertext über OpenAI, Pexels und FFmpeg zur fertigen MP4-Datei in `media_asset`. Fortschritt, Quellen und optionale SRT-Untertitel bleiben im Auftrag. Schlüssel für die KI-Verarbeitung werden nach expliziter Zustimmung höchstens eine Stunde verschlüsselt im aktiven Auftrag gehalten und bei terminalen Zuständen entfernt. Eine vollständig abgeschaltete Infrastruktur führt keine physische Bereinigung aus; Backups benötigen eigene Löschregeln.
 
-| Modul | Verantwortung |
-|---|---|
-| Identity | Benutzer, Sessions, Workspaces und Rollen |
-| Content | Assets, Entwürfe, Captions, Hashtags und Freigaben |
-| Planning | Kalender, Zeitzone, Publication Jobs und Erinnerungen |
-| Publishing | Provider-Capabilities, Upload, Status-Polling und Retries |
-| Billing | Pläne, Mollie Customer/Payment/Subscription und Entitlements |
-| Insights | Eigene Performance-Daten, Trend-Signale, Quellen und Testideen |
-| Audience Review | Erklärbare Aktivitätssignale und manuelle Entscheidungen |
-| Integrations | OAuth-Connections, verschlüsselte Tokens und Odoo-Sync |
-
-## Social-OAuth
-
-1. Der Start-Handler erzeugt einen HMAC-signierten, zehn Minuten gültigen `state`-Wert und bindet ihn an eine Demo- oder Abo-Session.
-2. Ein providerbezogenes HTTP-only Cookie bindet den Wert an denselben Browser und verhindert Login-CSRF.
-3. Meta, LinkedIn oder TikTok authentifiziert den Nutzer und leitet nur einen einmaligen Authorization Code zurück.
-4. Der Callback prüft Flow-Modus, Session, Provider, Cookie und `state`, bevor der Code serverseitig gegen Tokens getauscht wird.
-5. Der Demo-Modus verschlüsselt Tokens per AES-256-GCM in providerbezogenen HTTP-only Cookies.
-6. Der Workspace-Modus schreibt denselben verschlüsselten Payload in `social_connection`; React erhält nur Accountname, Scopes und Ablaufdatum.
-
-Die Live-Demo führt reale OAuth-Requests mit minimalen Identitäts-Scopes aus. Publishing-Scopes werden erst im abonnementgeschützten Workspace nachgefordert. Client Secrets und Provider-Tokens werden weder an Client Components serialisiert noch in Logs geschrieben.
-
-## Veröffentlichungspfad
+Erst eine weitere Nutzeraktion erstellt eine `video_publication`. Instagram nutzt einen Reel-Container, TikTok FILE_UPLOAD und YouTube einen resumierbaren Upload. Jeder Worker prüft vor externen Aktionen aktuelle Mitgliedschaft, Zugangszeitraum, Kontoidentität und Berechtigungen. Gespeicherte IDs und verschlüsselte Upload-Zustände ermöglichen die spätere Abklärung unterbrochener Vorgänge.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> Draft
-  Draft --> Review
-  Review --> Scheduled: freigegeben
-  Scheduled --> Publishing: Job fällig
-  Publishing --> Published: Provider bestätigt
-  Publishing --> Retry: temporärer Fehler
-  Retry --> Publishing
-  Publishing --> Failed: dauerhaft / Review nötig
+  [*] --> queued: ausdrückliche Bestätigung
+  queued --> processing: exklusive Lease
+  processing --> published: öffentliche Veröffentlichung bestätigt
+  processing --> uploaded: Upload bestätigt, Sichtbarkeit begrenzt oder Verarbeitung offen
+  processing --> failed: eindeutiger Fehler
+  processing --> unknown: Ausgang unklar oder Lease abgelaufen
 ```
 
-Jede Publication erhält einen idempotenten Schlüssel aus `content_item_id`, Provider und geplantem Zeitpunkt. Die Queue startet Provider-Aufrufe frühestens zur Zielzeit. Exponentielle Retries gelten nur für temporäre Fehler; Scope-, Policy- und Media-Fehler landen direkt im manuellen Review.
+Es gibt keine automatischen kostenpflichtigen Wiederholungen von Videoaufträgen und keine blinden Wiederholungen unklarer Posts. UUID-Auftragsschlüssel, Datenbankbedingungen, `FOR UPDATE SKIP LOCKED` und Leases behandeln doppelte Anfragen und konkurrierende Worker. Der Planungskalender speichert Entwürfe, Freigaben und Termine; zeitgesteuertes automatisches Publishing aus diesem Kalender ist noch nicht implementiert.
 
-## Mandantenfähigkeit und Rechte
+## OAuth und Geheimnisse
 
-- Jede fachliche Tabelle trägt `workspace_id`.
-- API-Zugriffe validieren Session, Workspace-Mitgliedschaft und Rolle.
-- Rollen: `owner`, `admin`, `editor`, `reviewer`.
-- Produktion: PostgreSQL Row Level Security zusätzlich zur Server-Autorisierung.
-- Provider-Tokens werden envelope-verschlüsselt; der Schlüssel liegt nicht in der Datenbank.
+Instagram, LinkedIn, TikTok und YouTube verwenden den offiziellen OAuth-Login. Ein signierter, kurzlebiger State und ein providerbezogenes HTTP-only Cookie binden den Callback an den initiierenden Browser und Flow. Der Demo-Modus verwendet minimale Identitätsberechtigungen und verschlüsselte Cookies. Im Workspace liegen Tokens AES-GCM-verschlüsselt in `social_connection`; React erhält ausdrücklich projizierte Zusammenfassungen.
 
-## Medien
+Für Veröffentlichungen zählen tatsächlich erteilte Scopes. YouTube und TikTok unterstützen Token-Erneuerung; Instagram erfordert bei Ablauf derzeit eine neue Verbindung. Nur Eigentümer und Administratoren dürfen Workspace-Verbindungen speichern oder entfernen.
 
-1. Die Demo erzeugt ausschließlich lokale Blob-Vorschauen.
-2. Der angemeldete Test-Workspace sendet Dateien an einen authentifizierten Route Handler.
-3. Dateityp, Anzahl und Größe werden begrenzt; Inhalt, Metadaten und SHA-256-Prüfsumme landen in `media_asset`.
-4. Für größere Produktionsvideos wird die Binärablage später auf S3-kompatiblen Objekt-Storage verschoben; PostgreSQL behält Metadaten und Prüfsummen.
-5. Vor echtem Publishing kommen Virenscan, Transcoding und technische Validierung hinzu.
+Text-KI-Anfragen reichen den persönlichen Schlüssel einmalig weiter. Die Video-Queue benötigt die separat bestätigte befristete Speicherung. Betreiber-Pexels-Key, Workspace-Verschlüsselung, Social-Token-Verschlüsselung, Sitzungssignatur und Medien-HMAC haben getrennte Zwecke. Keine dieser Variablen gehört in `NEXT_PUBLIC_*`.
 
-Die aktuelle PostgreSQL-Binärablage ist bewusst auf Testdateien bis 12 MB begrenzt und kein Ersatz für skalierbaren Video-Objektspeicher.
+## Medienauslieferung
 
-## BYOK-KI
+Uploads sind weiterhin größenbegrenzt; vom Worker generierte MP4-Dateien dürfen bis zu 128 MiB groß sein. Inhalte und Prüfsummen liegen derzeit in PostgreSQL. Für größere Nutzerzahlen sind Objekt-Storage, Gesamtquoten und Retention ein weiterer Ausbauschritt.
 
-Der aktuelle Route Handler akzeptiert einen OpenAI-Key im Header, verwendet ihn einmalig und speichert ihn nicht. Für Produktion gibt es zwei Optionen:
+Bei Vercel prüft die App den Workspace-Zugang und leitet Medienabrufe zu `MEDIA_DELIVERY_URL` weiter. Der separate Node-Mediendienst streamt PostgreSQL-Inhalte in 256-KiB-Blöcken, unterstützt HEAD/Range und begrenzt gleichzeitige Streams. Private Links sind fünf Minuten gültig und an Asset, Workspace und Downloadzweck gebunden. Instagram erhält einen separaten Link für höchstens eine Stunde, der nur während der zugehörigen laufenden Veröffentlichung nutzbar ist. Beim vollständigen Self-Hosting bleibt die direkte Next.js-Auslieferung möglich.
 
-- **Ephemer:** Nutzer gibt den Key je Session/Anfrage an; maximale Datenminimierung.
-- **Workspace-Key:** verschlüsselte Speicherung mit expliziter Zustimmung, Rotation, Audit-Log und einer „Jetzt löschen“-Funktion.
+## Zahlung und Kundenidentität
 
-Prompts enthalten nur die für Caption/Hashtags erforderlichen Informationen. Medien werden nicht ungefragt an ein Modell übertragen.
+Der vorhandene Mollie-Checkout erzeugt Customer und First Payment. Bestätigung erfordert denselben initiierenden Browser, einen gültigen Checkout-State und den autoritativen Zahlungsstatus. Eine erste Zahlung gewährt ihren ursprünglichen 30-Tage-Zeitraum; Erstattungen und Chargebacks werden berücksichtigt. Die HTTP-only-Sitzung gilt höchstens 24 Stunden. Webhooks aktualisieren die bereits zugeordnete Zahlung idempotent.
 
-## Mollie
+Reguläre Kundenanmeldung/Wiederanmeldung und wiederkehrende Subscription-Abbuchungen sind noch nicht vollständig implementiert. Konfigurierte interne Testkonten können sich bereits anmelden. Diese Grenze muss vor einem öffentlichen Abo-Launch geschlossen werden.
 
-1. User und gewählter Plan stehen serverseitig fest.
-2. ContentDock erstellt einen Mollie Customer und speichert `customer_id`.
-3. First Payment mit `sequenceType=first` autorisiert das Mandat.
-4. Webhook liefert die Payment-ID; ContentDock lädt den Zustand direkt von Mollie.
-5. Nach gültigem Mandat entsteht die monatliche Subscription.
-6. Webhooks aktualisieren Subscription/Entitlements idempotent.
+## Betrieb und Prüfungen
 
-Der MVP implementiert Customer + First Payment und den autoritativen Payment-Fetch im Webhook. Datenbankpersistenz und Subscription-Erzeugung sind als Produktionsschritt markiert.
+Docker Compose enthält App, PostgreSQL, Migration-Service und optionale Profile `video`, `publishing`, `media`. Die Migrationen laufen mit Prüfsummen und Advisory Lock vor den Diensten. `DATABASE_URL` sowie alternativ `PG*` werden unterstützt. Externe Worker und Mediendienst sind für Vercel separat zu betreiben.
 
-## Observability
+Worker-Heartbeats steuern die Verfügbarkeit in der App. Provider-Fehler geben keine Rohpayloads oder Zugangsdaten aus. Produktionsmonitoring, Alarmierung, Backups und Löschfristen benötigen eine konkrete Betreiberkonfiguration. Typecheck, ESLint, lokale Provider-Vertragstests, echte PostgreSQL-Integration, FFmpeg-Ausgabe und Browserprüfungen begleiten die Implementierung; echte Plattformposts und reale Geräteprüfungen sind damit nicht bewiesen.
 
-- Strukturierte Logs ohne Tokens, API-Keys oder vollständige Provider-Payloads
-- Korrelations-ID pro Publication und Webhook
-- Metriken für Queue-Latenz, Provider-Fehlerquote und Publish-Erfolg
-- Alarmierung bei Webhook-Fehlern, ablaufenden Tokens und blockierten Jobs
-- Audit-Ereignisse für Freigabe, Veröffentlichung, Token-Wechsel und Audience-Review
-
-## Deployment
-
-- Vercel Preview pro Pull Request
-- Docker Compose mit Next.js-Standalone-App, PostgreSQL und vorgeschaltetem Migration-Service
-- Produktions-Promotion erst nach Typecheck, Lint, Build und E2E-Kernflow
-- Secrets getrennt nach Development, Preview und Production
-- Datenbankmigrationen laufen versions- und prüfsummengesichert unter Advisory Lock vor dem App-Start
+Details: [VIDEO-STUDIO.md](VIDEO-STUDIO.md), [PUBLISHING.md](PUBLISHING.md), [UI-UX.md](UI-UX.md).

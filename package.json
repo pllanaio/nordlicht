@@ -9,6 +9,11 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts tests/*.test.mjs",
+    "test:publishing": "node --test tests/publishing*.test.mjs",
+    "worker:video": "node scripts/video-worker.mjs",
+    "worker:publishing": "node scripts/publishing-worker.mjs",
+    "media:serve": "node scripts/media-server.mjs",
     "secret:generate": "node scripts/generate-secret.mjs",
     "test-account:hash": "node scripts/hash-test-password.mjs"
   },
@@ -28,6 +33,7 @@
     "@types/react-dom": "^19.0.2",
     "eslint": "^9.17.0",
     "eslint-config-next": "^16.0.0",
+    "tsx": "^4.23.15",
     "typescript": "^5.7.2"
   },
   "engines": {

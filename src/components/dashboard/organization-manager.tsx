@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Building2, CheckCircle2, Server, ShieldCheck, Trash2, UserPlus, UsersRound } from "lucide-react";
+import { DashboardDialog } from "@/components/dashboard/dashboard-dialog";
 import type { Organization, OrganizationMember, OrganizationRole, SmtpSettings } from "@/lib/workspace-types";
 
 export type { Organization, OrganizationMember, OrganizationRole, SmtpSettings } from "@/lib/workspace-types";
@@ -42,6 +43,8 @@ export function OrganizationManager({
   const [role, setRole] = useState<OrganizationRole>("Manager");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [sendingInvite, setSendingInvite] = useState(false);
+  const [inviteError, setInviteError] = useState("");
+  const [memberToRemove, setMemberToRemove] = useState<OrganizationMember | null>(null);
   const currentMember = organization?.members.find((member) => member.email.toLocaleLowerCase() === currentUser.email.toLocaleLowerCase());
   const canAdminister = !organization || organization.members.length === 0 || currentMember?.role === "Administrator";
 
@@ -64,7 +67,7 @@ export function OrganizationManager({
     if (!organization || !firstName.trim() || !lastName.trim() || !email.trim()) return;
     const smtpReady = Boolean(organization.smtp.host && organization.smtp.port && organization.smtp.username && organization.smtp.password && organization.smtp.fromEmail);
     if (!smtpReady) {
-      onToast("Bitte vervollständige zuerst die SMTP-Konfiguration.");
+      setInviteError("Bitte ergänze zuerst die E-Mail-Einstellungen unter „Einladungsversand“.");
       return;
     }
     const member: OrganizationMember = {
@@ -76,6 +79,7 @@ export function OrganizationManager({
       status: "Eingeladen",
     };
     setSendingInvite(true);
+    setInviteError("");
     try {
       if (!demo) {
         await onBeforeInvite?.();
@@ -91,7 +95,7 @@ export function OrganizationManager({
       setEmail("");
       onToast(demo ? `Demo-Einladung an ${member.email} simuliert.` : `Einladung wurde an ${member.email} versendet.`);
     } catch (cause) {
-      onToast(cause instanceof Error ? cause.message : "Die Einladung konnte nicht versendet werden.");
+      setInviteError(cause instanceof Error ? cause.message : "Die Einladung konnte nicht versendet werden. Bitte prüfe die E-Mail-Einstellungen.");
     } finally {
       setSendingInvite(false);
     }
@@ -133,9 +137,9 @@ export function OrganizationManager({
   return (
     <div className="organization-manager">
       <section className="organization-manager__summary">
-        <div><span className="feature-kicker">Aktive Organisation</span><h2>{organization.name}</h2><p>{organization.members.length} Mitglieder · RBAC aktiviert</p></div>
+        <div><span className="feature-kicker">Aktive Organisation</span><h2>{organization.name}</h2><p>{organization.members.length} Mitglieder · Zugriff nach Rolle</p></div>
         <div className="organization-manager__roles"><span><ShieldCheck aria-hidden="true" /><strong>Administrator</strong><small>Vollzugriff auf Organisation, Benutzer, Einstellungen und Content.</small></span><span><UsersRound aria-hidden="true" /><strong>Manager</strong><small>Kann Content erstellen, bearbeiten, hochladen und planen.</small></span></div>
-        <div className="organization-manager__danger">{canAdminister ? (confirmDelete ? <><strong>Organisation und lokale Demo-Daten wirklich löschen?</strong><button type="button" onClick={onDelete}>Ja, neu beginnen</button><button type="button" onClick={() => setConfirmDelete(false)}>Abbrechen</button></> : <button type="button" onClick={() => setConfirmDelete(true)}><Trash2 aria-hidden="true" /> Organisation löschen</button>) : <><strong>Manager-Zugriff</strong><span>Organisations-, Rollen- und SMTP-Einstellungen sind nur für Administratoren bearbeitbar.</span></>}</div>
+        <div className="organization-manager__danger">{canAdminister ? <button type="button" onClick={() => setConfirmDelete(true)}><Trash2 aria-hidden="true" /> Organisation löschen</button> : <><strong>Manager-Zugriff</strong><span>Organisation, Rollen und Einladungsversand können nur Administratoren bearbeiten.</span></>}</div>
       </section>
 
       <section className="organization-members">
@@ -146,20 +150,22 @@ export function OrganizationManager({
               <span>{member.firstName.slice(0, 1)}{member.lastName.slice(0, 1)}</span>
               <div><strong>{member.firstName} {member.lastName}</strong><small>{member.email}</small></div>
               <em className={member.status === "Aktiv" ? "is-active" : ""}>{member.status}</em>
-              <select value={member.role} onChange={(event) => updateMemberRole(member.id, event.target.value as OrganizationRole)} aria-label={`Rolle von ${member.firstName} ${member.lastName}`} disabled={!canAdminister}><option>Administrator</option><option>Manager</option></select>
-              <button type="button" onClick={() => removeMember(member.id)} aria-label={`${member.firstName} ${member.lastName} entfernen`} disabled={!canAdminister}><Trash2 aria-hidden="true" /></button>
+              <select value={member.role} onChange={(event) => updateMemberRole(member.id, event.target.value as OrganizationRole)} aria-label={`Rolle von ${member.firstName} ${member.lastName}`} disabled={!canAdminister || member.email.toLocaleLowerCase() === currentUser.email.toLocaleLowerCase()}><option>Administrator</option><option>Manager</option></select>
+              <button type="button" onClick={() => setMemberToRemove(member)} aria-label={`${member.firstName} ${member.lastName} entfernen`} disabled={!canAdminister || member.email.toLocaleLowerCase() === currentUser.email.toLocaleLowerCase()}><Trash2 aria-hidden="true" /></button>
             </article>
           )) : <div className="organization-members__empty">Noch keine Mitglieder. Nutze das Einladungsformular.</div>}
         </div>
         {canAdminister ? <form className="organization-invite" onSubmit={inviteMember}>
+          <p>Alle Angaben sind erforderlich. Eingeladene Personen erhalten ihre gewählte Rolle.</p>
           <div><label className="composer-field">Vorname<input value={firstName} onChange={(event) => setFirstName(event.target.value)} required /></label><label className="composer-field">Nachname<input value={lastName} onChange={(event) => setLastName(event.target.value)} required /></label></div>
           <div><label className="composer-field">E-Mail-Adresse<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@unternehmen.de" required /></label><label className="composer-field">Rolle<select value={role} onChange={(event) => setRole(event.target.value as OrganizationRole)}><option>Manager</option><option>Administrator</option></select></label></div>
-          <button className="button" type="submit" disabled={sendingInvite}><UserPlus aria-hidden="true" /> {sendingInvite ? "Einladung wird verarbeitet …" : "Benutzer einladen"}</button>
+          {inviteError ? <p className="composer-error" role="alert">{inviteError}</p> : null}
+          <button className="button" type="submit" disabled={sendingInvite}><UserPlus aria-hidden="true" /> {sendingInvite ? "Einladung wird gesendet …" : demo ? "Demo-Einladung ausprobieren" : "Einladung per E-Mail senden"}</button>
         </form> : <p className="organization-manager__manager-note"><ShieldCheck aria-hidden="true" /> Als Manager kannst du Content bearbeiten, erstellen, hochladen und planen. Benutzerverwaltung bleibt Administratoren vorbehalten.</p>}
       </section>
 
       <section className="smtp-settings">
-        <header><div><span className="feature-kicker">Einladungsversand</span><h2>SMTP-Zugang hinterlegen</h2><p>{demo ? "Tech-Demo: Zugangsdaten bleiben nur in dieser Sitzung; es wird keine echte E-Mail gesendet." : "Das SMTP-Passwort wird verschlüsselt im Workspace gespeichert und bei Einladungen nicht wieder an den Browser übertragen."}</p></div><Server aria-hidden="true" /></header>
+        <header><div><span className="feature-kicker">Einladungsversand</span><h2>E-Mail-Versand einrichten</h2><p>{demo ? "Demo mit Beispielzugangsdaten. Es werden keine E-Mails gesendet. Bitte verwende hier keine echten Passwörter." : "Trage die SMTP-Daten deines E-Mail-Anbieters ein. Änderungen werden automatisch gespeichert; dein Passwort wird verschlüsselt aufbewahrt."}</p></div><Server aria-hidden="true" /></header>
         <div className="smtp-settings__grid">
           <label className="composer-field">SMTP-Host<input value={organization.smtp.host} onChange={(event) => updateSmtp("host", event.target.value)} placeholder="smtp.example.com" disabled={!canAdminister} /></label>
           <label className="composer-field">Port<input inputMode="numeric" value={organization.smtp.port} onChange={(event) => updateSmtp("port", event.target.value)} disabled={!canAdminister} /></label>
@@ -168,8 +174,10 @@ export function OrganizationManager({
           <label className="composer-field">Absenderadresse<input type="email" value={organization.smtp.fromEmail} onChange={(event) => updateSmtp("fromEmail", event.target.value)} disabled={!canAdminister} /></label>
           <label className="composer-field">Verschlüsselung<select value={organization.smtp.encryption} onChange={(event) => updateSmtp("encryption", event.target.value)} disabled={!canAdminister}><option>STARTTLS</option><option>SSL/TLS</option></select></label>
         </div>
-        <p className="smtp-settings__status"><CheckCircle2 aria-hidden="true" /> {organization.smtp.host && organization.smtp.password ? "SMTP-Konfiguration vollständig" : "SMTP-Konfiguration unvollständig"}</p>
+        <p className="smtp-settings__status" role="status"><CheckCircle2 aria-hidden="true" /> {organization.smtp.host && organization.smtp.port && organization.smtp.username && organization.smtp.password && organization.smtp.fromEmail ? "Zugangsdaten vollständig · Verbindung noch nicht geprüft" : "Bitte ergänze alle Angaben für den E-Mail-Versand."}</p>
       </section>
+      {confirmDelete ? <DashboardDialog labelledBy="delete-organization-title" onClose={() => setConfirmDelete(false)}><section className="confirmation-dialog"><h2 id="delete-organization-title">Organisation löschen?</h2><p>Die Organisation „{organization.name}“, ihre Mitglieder und ihre Inhalte werden entfernt. Dieser Schritt kann nicht rückgängig gemacht werden.</p><div><button data-initial-focus className="secondary-button" type="button" onClick={() => setConfirmDelete(false)}>Abbrechen</button><button className="button button--danger" type="button" onClick={() => { setConfirmDelete(false); onDelete(); }}>Organisation löschen</button></div></section></DashboardDialog> : null}
+      {memberToRemove ? <DashboardDialog labelledBy="remove-member-title" onClose={() => setMemberToRemove(null)}><section className="confirmation-dialog"><h2 id="remove-member-title">Mitglied entfernen?</h2><p>{memberToRemove.firstName} {memberToRemove.lastName} verliert den Zugriff auf diese Organisation.</p><div><button data-initial-focus className="secondary-button" type="button" onClick={() => setMemberToRemove(null)}>Abbrechen</button><button className="button button--danger" type="button" onClick={() => { removeMember(memberToRemove.id); setMemberToRemove(null); }}>Mitglied entfernen</button></div></section></DashboardDialog> : null}
     </div>
   );
 }

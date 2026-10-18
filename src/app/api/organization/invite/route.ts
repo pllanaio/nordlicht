@@ -74,8 +74,21 @@ export async function POST(request: Request) {
       from: `ContentDock <${fromEmail}>`,
       to: recipient,
       subject: `Einladung zu ${organizationName}`,
-      text: `Hallo ${firstName}, du wurdest als ${role} zu ${organizationName} in ContentDock eingeladen. Melde dich mit dieser E-Mail-Adresse bei ContentDock an, sobald dein Konto aktiviert wurde.`,
-      html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:32px"><h1 style="font-size:26px">Einladung zu ${safeOrganization}</h1><p>Hallo ${safeName},</p><p>du wurdest als <strong>${role}</strong> zur Organisation <strong>${safeOrganization}</strong> in ContentDock eingeladen.</p><p>Melde dich mit dieser E-Mail-Adresse bei ContentDock an, sobald dein Konto aktiviert wurde.</p></div>`,
+      text: `ContentDock\n\nHallo ${firstName},\n\ndu wurdest zu ${organizationName} eingeladen. Deine vorgesehene Rolle: ${role}.\n\nNächster Schritt: Wende dich an die Person, die dich eingeladen hat, um deinen Zugang abzustimmen. Diese Einladung allein schaltet noch keinen Teamzugang frei.\n\nDu hast keine Einladung erwartet? Dann kannst du diese Nachricht ignorieren.`,
+      html: `<!doctype html><html lang="de"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>Einladung zu ContentDock</title></head>
+        <body style="margin:0;background:#f5f5f7;color:#22252a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:16px;line-height:1.6">
+          <table role="presentation" style="width:100%;border-collapse:collapse"><tr><td style="padding:24px 16px">
+            <div style="max-width:560px;margin:0 auto;background:#fff;border:1px solid #e2e3e7;border-radius:16px;padding:28px">
+              <p style="margin:0 0 28px;font-size:20px;font-weight:700;color:#bc3b30">ContentDock</p>
+              <h1 style="margin:0 0 20px;font-size:28px;line-height:1.2">Du bist eingeladen.</h1>
+              <p>Hallo ${safeName},</p><p>du wurdest zur Organisation <strong>${safeOrganization}</strong> eingeladen.</p>
+              <p style="padding:16px;background:#f5f5f7;border-radius:10px">Deine vorgesehene Rolle<br><strong>${role}</strong></p>
+              <h2 style="font-size:18px;margin:24px 0 8px">Dein nächster Schritt</h2>
+              <p>Wende dich an die Person, die dich eingeladen hat, um deinen Zugang abzustimmen. Diese Einladung allein schaltet noch keinen Teamzugang frei.</p>
+              <p style="margin:28px 0 0;color:#60646d;font-size:14px">Du hast keine Einladung erwartet? Dann kannst du diese Nachricht ignorieren.</p>
+            </div>
+          </td></tr></table>
+        </body></html>`,
     });
     transport.close();
     return NextResponse.json({ sent: true });
